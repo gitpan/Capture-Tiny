@@ -12,67 +12,18 @@ use Exporter ();
 use IO::Handle ();
 use File::Temp qw/tempfile tmpnam/;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 $VERSION = eval $VERSION; ## no critic
 our @ISA = qw/Exporter/;
-our @EXPORT_OK = qw/capture tee/;
+our @EXPORT_OK = qw/capture capture_merged tee tee_merged/;
 
 my $use_system = $^O eq 'MSWin32';
 
 #--------------------------------------------------------------------------#
-# Error messages
-#--------------------------------------------------------------------------#
-
-sub _redirect_err { return "Error redirecting $_[0]: $!" }
-
-#--------------------------------------------------------------------------#
-# bulk filehandle manipulation
-#--------------------------------------------------------------------------#
-
-sub _copy_std {
-  my @std = map { IO::Handle->new } 0 .. 2;
-  open $std[0], "<&STDIN"   or die _redirect_err("STDIN" );
-  open $std[1], ">&STDOUT"  or die _redirect_err("STDOUT");
-  open $std[2], ">&STDERR"  or die _redirect_err("STDERR");
-  return @std;
-}
-
-sub _open_std {
-  open STDIN , "<&" . fileno( $_[0] ) or die _redirect_err("STDIN" );
-  open STDOUT, ">&" . fileno( $_[1] ) or die _redirect_err("STDOUT");
-  open STDERR, ">&" . fileno( $_[2] ) or die _redirect_err("STDERR");
-}
-
-sub _autoflush {
-  select((select($_), $|=1)[0]) for @_;
-}
-
-#--------------------------------------------------------------------------#
-# _fork_exec
-#--------------------------------------------------------------------------#
-
-sub _fork_exec {
-  my ($tee, $in, $out, $err, @cmd) = @_;
-  my $pid = fork; # XXX needs error handling
-  if ( not defined $pid ) {
-    die "Couldn't fork(): $!";
-  }
-  elsif ($pid == 0) { # child
-    untie *STDIN;
-    untie *STDOUT;
-    untie *STDOUT;
-    close $tee;
-    _open_std( $in, $out, $err );
-    exec @cmd;
-  }
-  return $pid
-}
-
-#--------------------------------------------------------------------------#
 # command to tee output -- the argument is a filename that must
 # be opened to signal that the process is ready to receive input.
-# This is annoying, but seems to be the best that can be done on Win32
-# so I use it as a simple, portable IPC technique
+# This is annoying, but seems to be the best that can be done
+# as a simple, portable IPC technique
 #--------------------------------------------------------------------------#
 my @cmd = ($^X, '-e', '$SIG{HUP}=sub{exit}; ' 
   . 'if( my $fn=shift ){ open my $fh, qq{>$fn}; print {$fh} $$; close $fh;} '
@@ -81,87 +32,140 @@ my @cmd = ($^X, '-e', '$SIG{HUP}=sub{exit}; '
 );
 
 #--------------------------------------------------------------------------#
-# _capture_tee()
+# filehandle manipulation
+#--------------------------------------------------------------------------#
+
+sub _open {
+  open $_[0], $_[1] or die "Error from open(" . join(q{, }, @_) . "): $!";
+}
+
+sub _copy_std {
+  my %handles = map { $_, IO::Handle->new } qw/stdin stdout stderr/;
+  _open $handles{stdin},   "<&STDIN";
+  _open $handles{stdout},  ">&STDOUT";
+  _open $handles{stderr},  ">&STDERR";
+  return \%handles;
+}
+
+sub _open_std {
+  my ($handles) = @_;
+  _open \*STDIN , "<&" . fileno( $handles->{stdin} );
+  _open \*STDOUT, ">&" . fileno( $handles->{stdout} );
+  _open \*STDERR, ">&" . fileno( $handles->{stderr} );
+}
+
+#--------------------------------------------------------------------------#
+# private subs
+#--------------------------------------------------------------------------#
+
+sub _start_tee {
+  my ($which, $stash) = @_;
+  # setup pipes
+  $stash->{$_}{$which} = IO::Handle->new for qw/tee reader/;
+  pipe $stash->{reader}{$which}, $stash->{tee}{$which};
+  select((select($stash->{tee}{$which}), $|=1)[0]); # autoflush
+  # setup desired redirection for parent and child
+  $stash->{new}{$which} = $stash->{tee}{$which};
+  $stash->{child}{$which} = {
+    stdin   => $stash->{reader}{$which},
+    stdout  => $stash->{old}{$which},
+    stderr  => $stash->{capture}{$which},
+  };
+  # flag file is used to signal the child is ready
+  $stash->{flag_files}{$which} = scalar tmpnam();
+  # execute @cmd as a separate process
+  if ( $use_system ) {
+    _open_std( $stash->{child}{$which} );
+    $stash->{pid}{$which} = system(1, @cmd, $stash->{flag_files}{$which});
+    # not restoring std here as it all gets redirected again shortly anyway
+  }
+  else { # use fork
+    _fork_exec( $which, $stash );
+  }
+}
+
+sub _fork_exec {
+  my ($which, $stash) = @_;
+  my $pid = fork; 
+  if ( not defined $pid ) {
+    die "Couldn't fork(): $!";
+  }
+  elsif ($pid == 0) { # child
+    untie *STDIN; untie *STDOUT; untie *STDERR;
+    close $stash->{tee}{$which};
+    _open_std( $stash->{child}{$which} );
+    exec @cmd, $stash->{flag_files}{$which};
+  }
+  $stash->{pid}{$which} = $pid
+}
+
+sub _wait_for_tees { 
+  my ($stash) = @_;
+  for my $file ( values %{$stash->{flag_files}} ) { 
+    1 until -f $file; # XXX should add alarm and timeout 
+    unlink $file
+  };
+}
+
+sub _kill_tees {
+  my ($stash) = @_;
+  close $_ for values %{ $stash->{tee} };
+  if ( $use_system ) {
+    eval { Win32::Sleep(25) }; # 25 ms pause for output to get flushed, I hope
+    kill 1, $_ for values %{ $stash->{pid} }; # shut them down hard
+  }
+  else {
+    waitpid $_, 0 for values %{ $stash->{pid} };
+  }
+}
+
+sub _slurp { 
+  seek $_[0],0,0; local $/; scalar readline $_[0]; 
+}
+
+#--------------------------------------------------------------------------#
+# _capture_tee() -- generic main sub for capturing or teeing
 #--------------------------------------------------------------------------#
 
 sub _capture_tee {
-  my ($code, $tee) = @_;
-  
-  my @copy_of_std = _copy_std();
-  my @captures    = ( undef, scalar tempfile(), scalar tempfile() );
-  my @readers     = ( undef, IO::Handle->new, IO::Handle->new );
-  my @tees        = ( undef, IO::Handle->new, IO::Handle->new );
-  my @pids;
-
-  # if teeing, redirect output to teeing subprocesses
-  if ($tee) {
-    pipe $readers[1], $tees[1];
-    pipe $readers[2], $tees[2];
-    _autoflush( @tees[1,2] );
-    my @out_handles = ($readers[1], $copy_of_std[1], $captures[1]);
-    my @err_handles = ($readers[2], $copy_of_std[2], $captures[2]);
-    my @flag_files = ( scalar tmpnam(), scalar tmpnam() );
-    if ( $use_system ) {
-      _open_std( @out_handles );
-      push @pids, system(1, @cmd, $flag_files[0]);
-      _open_std( @err_handles );
-      push @pids, system(1, @cmd, $flag_files[1]);
-    }
-    else { # use fork
-      push @pids, _fork_exec($tees[1] => @out_handles, @cmd, $flag_files[0] );
-      push @pids, _fork_exec($tees[2] => @err_handles, @cmd, $flag_files[1] );
-    }
-    _open_std( $copy_of_std[0], @tees[1,2] );
-    # wait for the OS get the processes set up
-    1 until -f $flag_files[0] && -f $flag_files[1];
-    unlink $_ for @flag_files;
-    close $_ for @readers[1,2];
-  }
-  # if not teeing, redirect output to capture file
-  else {
-    _open_std( $copy_of_std[0], @captures[1,2] );
-  }
-
-  # run code block
+  my ($tee_stdout, $tee_stderr, $merge, $code) = @_;
+  # save existing filehandles and setup captures
+  my $stash = { old => _copy_std() };
+  $stash->{new}{$_} = $stash->{capture}{$_} = tempfile() for qw/stdout stderr/;
+  # tees may change $stash->{new}
+  _start_tee( stdout => $stash ) if $tee_stdout;
+  _start_tee( stderr => $stash ) if $tee_stderr;
+  _wait_for_tees( $stash ) if $tee_stdout || $tee_stderr;
+  # finalize redirection
+  $stash->{new}{stderr} = $stash->{new}{stdout} if $merge;
+  $stash->{new}{stdin} = $stash->{old}{stdin};
+  _open_std( $stash->{new} );
+  # execute user provided code
   $code->();
-  
-  # restore original handles
-  _open_std( @copy_of_std );
-  
-  # shut down kids
-  if ( $tee ) {
-    close $_ for @tees[1,2];   # kids should stop when input closes
-    if ( $use_system ) {
-      kill 1, $_ for @pids; # tell them to hang up if they haven't stopped
-    }
-    else {
-      waitpid $_, 0 for @pids;
-    }
-  }
-
-  # read back capture output
-  my ($got_out, $got_err) = 
-    map { do { seek $_,0,0; local $/; scalar <$_> } } @captures[1,2];
-
+  # restore prior filehandles and shut down tees
+  _open_std( $stash->{old} );
+  _kill_tees( $stash ) if $tee_stdout || $tee_stderr;
+  # return captured output
+  my $got_out = _slurp($stash->{capture}{stdout});
+  my $got_err = $merge ? q() : _slurp($stash->{capture}{stderr});
+  return $got_out if $merge;
   return wantarray ? ($got_out, $got_err) : $got_out;
 }
 
 #--------------------------------------------------------------------------#
-# capture()
+# create API subroutines from [tee STDOUT flag, tee STDERR, merge flag]               
 #--------------------------------------------------------------------------#
 
-sub capture(&) { ## no critic
-  $_[1] = 0; # no tee
-  goto \&_capture_tee;
-}
+my %api = (
+  capture         => [0,0,0],
+  capture_merged  => [0,0,1],
+  tee             => [1,1,0],
+  tee_merged      => [1,0,1], # don't tee STDOUT since merging
+);
 
-#--------------------------------------------------------------------------#
-# tee()
-#--------------------------------------------------------------------------#
-
-sub tee(&) { ## no critic
-  $_[1] = 1; # tee
-  goto \&_capture_tee;
+for my $sub ( keys %api ) {
+  my $args = join q{, }, @{$api{$sub}}; 
+  eval "sub $sub(&) {unshift \@_, $args; goto \\&_capture_tee;}"; ## no critic
 }
 
 1;
@@ -188,6 +192,14 @@ This documentation describes version %%VERSION%%.
 
     ($stdout, $stderr) = tee {
       # your code here 
+    };
+
+    $merged = capture_merged {
+      # your code here
+    };
+
+    $merged = tee_merged {
+      # your code here
     };
 
 = DESCRIPTION
@@ -224,6 +236,18 @@ can be called in block form:
     # your code here ...
   };
 
+== capture_merged
+
+  $merged = capture_merged \&code;
+
+The {capture_merged} function works just like {capture} except STDOUT and
+STDERR are merged. (Technically, STDERR is redirected to STDOUT before
+executing the function.)  If no output was received, returns an empty string.
+As with {capture} it may be called in block form.
+
+Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
+properly ordered due to buffering
+
 == tee
 
   ($stdout, $stderr) = tee \&code;
@@ -233,17 +257,26 @@ The {tee} function works just like {capture}, except that output is captured
 as well as passed on to the original STDOUT and STDERR.  As with {capture} it
 may be called in block form.
 
+== tee_merged
+
+  $merged = tee_merged \&code;
+
+The {tee_merged} function works just like {capture_merged} except that output
+is captured as well as passed on to STDOUT.  As with {capture} it may be called
+in block form.
+
+Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
+properly ordered due to buffering
+
 = LIMITATIONS
 
 Portability is a goal, not a guarantee.  {tee} requires fork, except on 
 Windows where {system(1, @cmd)} is used instead.  Not tested on any
 esoteric platforms yet.  Minimal test suite so far.
 
-No support for merging STDERR with STDOUT.  This may be added in the future.
-
 = BUGS
 
-Please report any bugs or feature using the CPAN Request Tracker.  
+Please report any bugs or feature requests using the CPAN Request Tracker.  
 Bugs can be submitted through the web interface at 
 [http://rt.cpan.org/Dist/Display.html?Queue=Capture-Tiny]
 

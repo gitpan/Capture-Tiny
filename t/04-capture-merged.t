@@ -6,116 +6,88 @@
 
 use strict;
 use warnings;
+use lib 't/lib';
 use Test::More;
+use Capture::Tiny qw/capture_merged/;
 
-use Capture::Tiny qw/capture/;
+# autoflush to try for correct output order in tests
+select STDERR; $|++;
+select STDOUT; $|++;
 
-plan tests => 16; 
+plan tests => 6; 
 
 my ($out, $err, $label);
 sub _reset { $_ = undef for ($out, $err ); 1};
-
-#--------------------------------------------------------------------------#
-# Capture nothing from perl
-#--------------------------------------------------------------------------#
-
-_reset;
-($out, $err) = capture {
-  my $foo = 1;
-};
-
-$label = "perl NOP: ";
-is($out, '', "$label captured stdout");
-is($err, '', "$label captured stderr");
 
 #--------------------------------------------------------------------------#
 # Capture STDOUT from perl
 #--------------------------------------------------------------------------#
 
 _reset;
-($out, $err) = capture {
+$out = capture_merged {
   print "Foo";
 };
 
 $label = "perl STDOUT: ";
-is($out, 'Foo', "$label captured stdout");
-is($err, '', "$label captured stderr");
+is($out, 'Foo', "$label captured merged");
 
 #--------------------------------------------------------------------------#
 # Capture STDERR from perl
 #--------------------------------------------------------------------------#
 
 _reset;
-($out, $err) = capture {
+$out = capture_merged {
   print STDERR "Bar";
 };
 
 $label = "perl STDERR:";
-is($out, '', "$label captured stdout");
-is($err, 'Bar', "$label captured stderr");
+is($out, 'Bar', "$label captured merged");
 
 #--------------------------------------------------------------------------#
-# Capture STDOUT/STDERR from perl
+# Capture STDOUT from perl
 #--------------------------------------------------------------------------#
 
 _reset;
-($out, $err) = capture {
+$out = capture_merged {
   print "Foo"; print STDERR "Bar";
 };
 
 $label = "perl STDOUT/STDERR:";
-is($out, "Foo", "$label captured stdout");
-is($err, "Bar", "$label captured stderr");
-
-#--------------------------------------------------------------------------#
-# system -- nothing
-#--------------------------------------------------------------------------#
-
-_reset;
-($out, $err) = capture {
-  system ($^X, '-e', 'my $foo = 1');
-};
-
-$label = "system NOP:";
-is($out, '', "$label captured stdout");
-is($err, '', "$label captured stderr");
+is($out, "FooBar", "$label captured merged");
 
 #--------------------------------------------------------------------------#
 # system -- STDOUT
 #--------------------------------------------------------------------------#
 
 _reset;
-($out, $err) = capture {
+$out = capture_merged {
   system ($^X, '-e', 'print q{Foo}');
 };
 
 $label = "system STDOUT:";
-is($out, "Foo", "$label captured stdout");
-is($err, '', "$label captured stderr");
+is($out, 'Foo', "$label captured merged");
 
 #--------------------------------------------------------------------------#
 # system -- STDERR
 #--------------------------------------------------------------------------#
 
 _reset;
-($out, $err) = capture {
+$out = capture_merged {
   system ($^X, '-e', 'print STDERR q{Bar}');
 };
 
 $label = "system STDERR:";
-is($out, '', "$label captured stdout");
-is($err, "Bar", "$label captured stderr");
+is($out, "Bar", "$label captured merged");
 
 #--------------------------------------------------------------------------#
 # system -- STDOUT/STDERR
 #--------------------------------------------------------------------------#
 
 _reset;
-($out, $err) = capture {
-  system ($^X, '-e', 'print q{Foo}; print STDERR q{Bar}');
+$out = capture_merged {
+  system ($^X, '-e', 'select STDERR; $|++; select STDOUT; $|++; print q{Foo}; print STDERR q{Bar}');
 };
 
 $label = "system STDOUT/STDERR:";
-is($out, "Foo", "$label captured stdout");
-is($err, "Bar", "$label captured stderr");
+is($out, "FooBar", "$label captured merged");
 

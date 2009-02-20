@@ -7,6 +7,18 @@
 
 Revision history for Capture-Tiny
 
+0.03 Fri Feb 20 13:03:08 EST 2009
+
+  Added:
+
+    - capture_merged() and tee_merged()
+
+  Fixed:
+
+    - Tests skip if not Win32 and no fork() (rather than Build.PL and
+      Makefile.PL failing); this allows capture() on odd platforms, even if 
+      fork doesn't work
+
 0.02 Tue Feb 17 17:24:35 EST 2009
 
   Fixed: 
