@@ -10,14 +10,21 @@ use strict;
 use warnings;
 use Exporter ();
 use IO::Handle ();
+use File::Spec ();
 use File::Temp qw/tempfile tmpnam/;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 $VERSION = eval $VERSION; ## no critic
 our @ISA = qw/Exporter/;
 our @EXPORT_OK = qw/capture capture_merged tee tee_merged/;
 
 my $use_system = $^O eq 'MSWin32';
+
+our $DEBUG = 0;
+my $DEBUGFH;
+open $DEBUGFH, ">&STDERR" if $DEBUG;
+
+*_debug = $DEBUG ? sub(@) { print {$DEBUGFH} @_ } : sub(){0};
 
 #--------------------------------------------------------------------------#
 # command to tee output -- the argument is a filename that must
@@ -35,12 +42,45 @@ my @cmd = ($^X, '-e', '$SIG{HUP}=sub{exit}; '
 # filehandle manipulation
 #--------------------------------------------------------------------------#
 
+sub _name {
+  my $glob = shift;
+  no strict 'refs';
+  return *{$glob}{NAME};
+}
+
 sub _open {
   open $_[0], $_[1] or die "Error from open(" . join(q{, }, @_) . "): $!";
+  _debug( "# open " . join( ", " , map { defined $_ ? _name($_) : 'undef' } @_ ) . " as " . fileno( $_[0] ) . "\n" );
+}
+
+sub _close {
+  close $_[0] or die "Error from close(" . join(q{, }, @_) . "): $!";
+  _debug( "# closed " . ( defined $_[0] ? _name($_[0]) : 'undef' ) . "\n" );
+}
+
+sub _proxy_std {
+  my %proxies;
+  if ( ! defined fileno STDIN ) {
+    _open \*STDIN, "<" . File::Spec->devnull;
+    _debug( "# proxied STDIN as " . (defined fileno STDIN ? fileno STDIN : 'undef' ) . "\n" );
+    $proxies{stdin} = \*STDIN;
+  }
+  if ( ! defined fileno STDOUT ) {
+    _open \*STDOUT, ">" . File::Spec->devnull;
+    _debug( "# proxied STDOUT as " . (defined fileno STDOUT ? fileno STDOUT : 'undef' ) . "\n" );
+    $proxies{stdout} = \*STDOUT;
+  }
+  if ( ! defined fileno STDERR ) {
+    _open \*STDERR, ">" . File::Spec->devnull;
+    _debug( "# proxied STDERR as " . (defined fileno STDERR ? fileno STDERR : 'undef' ) . "\n" );
+    $proxies{stderr} = \*STDERR;
+  }
+  return %proxies;
 }
 
 sub _copy_std {
   my %handles = map { $_, IO::Handle->new } qw/stdin stdout stderr/;
+  _debug( "# copying std handles ...\n" ); 
   _open $handles{stdin},   "<&STDIN";
   _open $handles{stdout},  ">&STDOUT";
   _open $handles{stderr},  ">&STDERR";
@@ -49,9 +89,9 @@ sub _copy_std {
 
 sub _open_std {
   my ($handles) = @_;
-  _open \*STDIN , "<&" . fileno( $handles->{stdin} );
-  _open \*STDOUT, ">&" . fileno( $handles->{stdout} );
-  _open \*STDERR, ">&" . fileno( $handles->{stderr} );
+  _open \*STDIN, "<&" . fileno $handles->{stdin};
+  _open \*STDOUT, ">&" . fileno $handles->{stdout};
+  _open \*STDERR, ">&" . fileno $handles->{stderr};
 }
 
 #--------------------------------------------------------------------------#
@@ -92,24 +132,28 @@ sub _fork_exec {
   }
   elsif ($pid == 0) { # child
     untie *STDIN; untie *STDOUT; untie *STDERR;
-    close $stash->{tee}{$which};
+    _close $stash->{tee}{$which};
+    _debug( "# redirecting in child ...\n" ); 
     _open_std( $stash->{child}{$which} );
     exec @cmd, $stash->{flag_files}{$which};
   }
   $stash->{pid}{$which} = $pid
 }
 
+sub _files_exist { -f $_ || return 0 for @_; return 1 }
+
 sub _wait_for_tees { 
   my ($stash) = @_;
-  for my $file ( values %{$stash->{flag_files}} ) { 
-    1 until -f $file; # XXX should add alarm and timeout 
-    unlink $file
-  };
+  my $start = time;
+  my @files = values %{$stash->{flag_files}};
+  1 until _files_exist(@files) || (time - $start > 30);
+  die "Timed out waiting for subprocesses to start" if ! _files_exist(@files);
+  unlink $_ for @files; 
 }
 
 sub _kill_tees {
   my ($stash) = @_;
-  close $_ for values %{ $stash->{tee} };
+  _close $_ for values %{ $stash->{tee} };
   if ( $use_system ) {
     eval { Win32::Sleep(25) }; # 25 ms pause for output to get flushed, I hope
     kill 1, $_ for values %{ $stash->{pid} }; # shut them down hard
@@ -128,10 +172,13 @@ sub _slurp {
 #--------------------------------------------------------------------------#
 
 sub _capture_tee {
+  _debug( "# starting _capture_tee with (@_)...\n" ); 
   my ($tee_stdout, $tee_stderr, $merge, $code) = @_;
   # save existing filehandles and setup captures
+  my %proxy_std = _proxy_std();
   my $stash = { old => _copy_std() };
   $stash->{new}{$_} = $stash->{capture}{$_} = tempfile() for qw/stdout stderr/;
+  _debug("# will capture $_ on " .fileno($stash->{capture}{$_})."\n") for qw/stdout stderr/;
   # tees may change $stash->{new}
   _start_tee( stdout => $stash ) if $tee_stdout;
   _start_tee( stderr => $stash ) if $tee_stderr;
@@ -139,11 +186,16 @@ sub _capture_tee {
   # finalize redirection
   $stash->{new}{stderr} = $stash->{new}{stdout} if $merge;
   $stash->{new}{stdin} = $stash->{old}{stdin};
+  _debug( "# redirecting in parent ...\n" ); 
   _open_std( $stash->{new} );
   # execute user provided code
+  _debug( "# running code $code ...\n" ); 
   $code->();
   # restore prior filehandles and shut down tees
+  _debug( "# restoring ...\n" ); 
   _open_std( $stash->{old} );
+  _close( $_ ) for values %{$stash->{old}}; # don't leak fds
+  _close( $_ ) for values %proxy_std;
   _kill_tees( $stash ) if $tee_stdout || $tee_stderr;
   # return captured output
   my $got_out = _slurp($stash->{capture}{stdout});
@@ -272,7 +324,13 @@ properly ordered due to buffering
 
 Portability is a goal, not a guarantee.  {tee} requires fork, except on 
 Windows where {system(1, @cmd)} is used instead.  Not tested on any
-esoteric platforms yet.  Minimal test suite so far.
+esoteric platforms yet.  
+
+Capture::Tiny will work even if STDIN, STDOUT or STDERR have been previously
+closed.  However, since they may be reopened to capture or tee output, any code
+within the captured block that depends on finding them closed will, of course,
+not find them to be closed.  If they started closed, Capture::Tiny will reclose
+them again when the capture block finishes.
 
 = BUGS
 
