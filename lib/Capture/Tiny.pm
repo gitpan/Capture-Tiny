@@ -13,7 +13,7 @@ use IO::Handle ();
 use File::Spec ();
 use File::Temp qw/tempfile tmpnam/;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 $VERSION = eval $VERSION; ## no critic
 our @ISA = qw/Exporter/;
 our @EXPORT_OK = qw/capture capture_merged tee tee_merged/;
@@ -155,7 +155,7 @@ sub _kill_tees {
   my ($stash) = @_;
   _close $_ for values %{ $stash->{tee} };
   if ( $use_system ) {
-    eval { Win32::Sleep(25) }; # 25 ms pause for output to get flushed, I hope
+    eval { Win32::Sleep(250) }; # 250ms pause for output to get flushed, I hope
     kill 1, $_ for values %{ $stash->{pid} }; # shut them down hard
   }
   else {
@@ -236,7 +236,7 @@ This documentation describes version %%VERSION%%.
 
 = SYNOPSIS
 
-    use Capture::Tiny qw/capture tee/;
+    use Capture::Tiny qw/capture tee capture_merged tee_merged/;
     
     ($stdout, $stderr) = capture {
       # your code here
