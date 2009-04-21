@@ -8,19 +8,23 @@ package Capture::Tiny;
 use 5.006;
 use strict;
 use warnings;
+use Carp ();
 use Exporter ();
 use IO::Handle ();
 use File::Spec ();
 use File::Temp qw/tempfile tmpnam/;
+# Get PerlIO or fake it
+BEGIN { eval { require PerlIO; 1 } or *PerlIO::get_layers = sub { return () }; }
 
-our $VERSION = '0.05';
+our $VERSION = '0.05_51';
 $VERSION = eval $VERSION; ## no critic
 our @ISA = qw/Exporter/;
 our @EXPORT_OK = qw/capture capture_merged tee tee_merged/;
+our %EXPORT_TAGS = ( 'all' => \@EXPORT_OK );
 
 my $use_system = $^O eq 'MSWin32';
 
-our $DEBUG = 0;
+our $DEBUG = $ENV{PERL_CAPTURE_TINY_DEBUG};
 my $DEBUGFH;
 open $DEBUGFH, ">&STDERR" if $DEBUG;
 
@@ -42,46 +46,98 @@ my @cmd = ($^X, '-e', '$SIG{HUP}=sub{exit}; '
 # filehandle manipulation
 #--------------------------------------------------------------------------#
 
+sub _relayer {
+  my ($fh, $layers) = @_;
+  _debug("# requested layers (@{$layers}) to $fh\n");
+  my %seen;
+  my @unique = grep { $_ ne 'unix' and $_ ne 'perlio' and !$seen{$_}++ } @$layers;
+  _debug("# applying unique layers (@unique) to $fh\n");
+  binmode($fh, join(":", "", "raw", @unique));
+}
+
 sub _name {
   my $glob = shift;
-  no strict 'refs';
+  no strict 'refs'; ## no critic
   return *{$glob}{NAME};
 }
 
 sub _open {
-  open $_[0], $_[1] or die "Error from open(" . join(q{, }, @_) . "): $!";
+  open $_[0], $_[1] or Carp::confess "Error from open(" . join(q{, }, @_) . "): $!";
   _debug( "# open " . join( ", " , map { defined $_ ? _name($_) : 'undef' } @_ ) . " as " . fileno( $_[0] ) . "\n" );
 }
 
 sub _close {
-  close $_[0] or die "Error from close(" . join(q{, }, @_) . "): $!";
+  close $_[0] or Carp::confess "Error from close(" . join(q{, }, @_) . "): $!";
   _debug( "# closed " . ( defined $_[0] ? _name($_[0]) : 'undef' ) . "\n" );
 }
 
+my %dup; # cache this so STDIN stays fd0
+my %proxy_count;  
 sub _proxy_std {
   my %proxies;
   if ( ! defined fileno STDIN ) {
-    _open \*STDIN, "<" . File::Spec->devnull;
-    _debug( "# proxied STDIN as " . (defined fileno STDIN ? fileno STDIN : 'undef' ) . "\n" );
+    $proxy_count{stdin}++;
+    if (defined $dup{stdin}) {
+      _open \*STDIN, "<&=" . fileno($dup{stdin});
+      _debug( "# restored proxy STDIN as " . (defined fileno STDIN ? fileno STDIN : 'undef' ) . "\n" );
+    }
+    else {
+      _open \*STDIN, "<" . File::Spec->devnull;
+      _debug( "# proxied STDIN as " . (defined fileno STDIN ? fileno STDIN : 'undef' ) . "\n" );
+      _open $dup{stdin} = IO::Handle->new, "<&=STDIN";
+    }
     $proxies{stdin} = \*STDIN;
+    binmode(STDIN, ':utf8') if $] >= 5.008;
   }
   if ( ! defined fileno STDOUT ) {
-    _open \*STDOUT, ">" . File::Spec->devnull;
-    _debug( "# proxied STDOUT as " . (defined fileno STDOUT ? fileno STDOUT : 'undef' ) . "\n" );
+    $proxy_count{stdout}++;
+    if (defined $dup{stdout}) {
+      _open \*STDOUT, ">&=" . fileno($dup{stdout});
+      _debug( "# restored proxy STDOUT as " . (defined fileno STDOUT ? fileno STDOUT : 'undef' ) . "\n" );
+    }
+    else {
+      _open \*STDOUT, ">" . File::Spec->devnull;
+      _debug( "# proxied STDOUT as " . (defined fileno STDOUT ? fileno STDOUT : 'undef' ) . "\n" );
+      _open $dup{stdout} = IO::Handle->new, ">&=STDOUT";
+    }
     $proxies{stdout} = \*STDOUT;
+    binmode(STDOUT, ':utf8') if $] >= 5.008;
   }
   if ( ! defined fileno STDERR ) {
-    _open \*STDERR, ">" . File::Spec->devnull;
-    _debug( "# proxied STDERR as " . (defined fileno STDERR ? fileno STDERR : 'undef' ) . "\n" );
+    $proxy_count{stderr}++;
+    if (defined $dup{stderr}) {
+      _open \*STDERR, ">&=" . fileno($dup{stderr});
+      _debug( "# restored proxy STDERR as " . (defined fileno STDERR ? fileno STDERR : 'undef' ) . "\n" );
+    }
+    else {
+      _open \*STDERR, ">" . File::Spec->devnull;
+      _debug( "# proxied STDERR as " . (defined fileno STDERR ? fileno STDERR : 'undef' ) . "\n" );
+      _open $dup{stderr} = IO::Handle->new, ">&=STDERR";
+    }
     $proxies{stderr} = \*STDERR;
+    binmode(STDERR, ':utf8') if $] >= 5.008;
   }
   return %proxies;
+}
+
+sub _unproxy {
+  my (%proxies) = @_;
+  _debug( "# unproxing " . join(" ", keys %proxies) . "\n" ); 
+  for my $p ( keys %proxies ) {
+    $proxy_count{$p}--;
+    _debug( "# unproxied " . uc($p) . " ($proxy_count{$p} left)\n" );
+    if ( ! $proxy_count{$p} ) {
+      _close $proxies{$p};
+      _close $dup{$p} unless $] < 5.008; # 5.6 will have already closed this as dup 
+      delete $dup{$p};
+    }
+  }
 }
 
 sub _copy_std {
   my %handles = map { $_, IO::Handle->new } qw/stdin stdout stderr/;
   _debug( "# copying std handles ...\n" ); 
-  _open $handles{stdin},   "<&STDIN";
+  _open $handles{stdin},   "<&STDIN"; 
   _open $handles{stdout},  ">&STDOUT";
   _open $handles{stderr},  ">&STDERR";
   return \%handles;
@@ -103,6 +159,9 @@ sub _start_tee {
   # setup pipes
   $stash->{$_}{$which} = IO::Handle->new for qw/tee reader/;
   pipe $stash->{reader}{$which}, $stash->{tee}{$which};
+  _debug( "# pipe for $which\: " .  _name($stash->{tee}{$which}) . " "  
+    . fileno( $stash->{tee}{$which} ) . " => " . _name($stash->{reader}{$which}) 
+    . " " . fileno( $stash->{reader}{$which}) . "\n" );
   select((select($stash->{tee}{$which}), $|=1)[0]); # autoflush
   # setup desired redirection for parent and child
   $stash->{new}{$which} = $stash->{tee}{$which};
@@ -128,13 +187,15 @@ sub _fork_exec {
   my ($which, $stash) = @_;
   my $pid = fork; 
   if ( not defined $pid ) {
-    die "Couldn't fork(): $!";
+    Carp::confess "Couldn't fork(): $!";
   }
   elsif ($pid == 0) { # child
+    _debug( "# in child process ...\n" ); 
     untie *STDIN; untie *STDOUT; untie *STDERR;
     _close $stash->{tee}{$which};
-    _debug( "# redirecting in child ...\n" ); 
+    _debug( "# redirecting handles in child ...\n" ); 
     _open_std( $stash->{child}{$which} );
+    _debug( "# calling exec on command ...\n" ); 
     exec @cmd, $stash->{flag_files}{$which};
   }
   $stash->{pid}{$which} = $pid
@@ -147,7 +208,7 @@ sub _wait_for_tees {
   my $start = time;
   my @files = values %{$stash->{flag_files}};
   1 until _files_exist(@files) || (time - $start > 30);
-  die "Timed out waiting for subprocesses to start" if ! _files_exist(@files);
+  Carp::confess "Timed out waiting for subprocesses to start" if ! _files_exist(@files);
   unlink $_ for @files; 
 }
 
@@ -164,7 +225,7 @@ sub _kill_tees {
 }
 
 sub _slurp { 
-  seek $_[0],0,0; local $/; scalar readline $_[0]; 
+  seek $_[0],0,0; local $/; return scalar readline $_[0]; 
 }
 
 #--------------------------------------------------------------------------#
@@ -175,10 +236,37 @@ sub _capture_tee {
   _debug( "# starting _capture_tee with (@_)...\n" ); 
   my ($tee_stdout, $tee_stderr, $merge, $code) = @_;
   # save existing filehandles and setup captures
+  local *CT_ORIG_STDIN  = *STDIN ;
+  local *CT_ORIG_STDOUT = *STDOUT;
+  local *CT_ORIG_STDERR = *STDERR;
+  # find initial layers
+  my %layers = (
+    stdin   => [PerlIO::get_layers(\*STDIN) ],
+    stdout  => [PerlIO::get_layers(\*STDOUT)],
+    stderr  => [PerlIO::get_layers(\*STDERR)],
+  );
+  _debug( "# existing layers for $_\: @{$layers{$_}}\n" ) for qw/stdin stdout stderr/;
+  # bypass scalar filehandles and tied handles
+  my %localize;
+  $localize{stdin}++,  local(*STDIN)  if grep { $_ eq 'scalar' } @{$layers{stdin}};
+  $localize{stdout}++, local(*STDOUT) if grep { $_ eq 'scalar' } @{$layers{stdout}};
+  $localize{stderr}++, local(*STDERR) if grep { $_ eq 'scalar' } @{$layers{stderr}};
+  $localize{stdout}++, local(*STDOUT), _open( \*STDOUT, ">&=1") if tied *STDOUT && $] >= 5.008;
+  $localize{stderr}++, local(*STDERR), _open( \*STDERR, ">&=2") if tied *STDERR && $] >= 5.008;
+  _debug( "# localized $_\n" ) for keys %localize; 
   my %proxy_std = _proxy_std();
+  _debug( "# proxy std is @{ [%proxy_std] }\n" );
   my $stash = { old => _copy_std() };
+  # update layers after any proxying
+  %layers = (
+    stdin   => [PerlIO::get_layers(\*STDIN) ],
+    stdout  => [PerlIO::get_layers(\*STDOUT)],
+    stderr  => [PerlIO::get_layers(\*STDERR)],
+  );
+  _debug( "# post-proxy layers for $_\: @{$layers{$_}}\n" ) for qw/stdin stdout stderr/;
+  # get handles for capture and apply existing IO layers
   $stash->{new}{$_} = $stash->{capture}{$_} = tempfile() for qw/stdout stderr/;
-  _debug("# will capture $_ on " .fileno($stash->{capture}{$_})."\n") for qw/stdout stderr/;
+  _debug("# will capture $_ on " .fileno($stash->{capture}{$_})."\n" ) for qw/stdout stderr/;
   # tees may change $stash->{new}
   _start_tee( stdout => $stash ) if $tee_stdout;
   _start_tee( stderr => $stash ) if $tee_stderr;
@@ -189,17 +277,33 @@ sub _capture_tee {
   _debug( "# redirecting in parent ...\n" ); 
   _open_std( $stash->{new} );
   # execute user provided code
-  _debug( "# running code $code ...\n" ); 
-  $code->();
+  my $exit_code;
+  {
+    local *STDIN = *CT_ORIG_STDIN if $localize{stdin}; # get original, not proxy STDIN
+    local *STDERR = *STDOUT if $merge; # minimize buffer mixups during $code
+    _debug( "# finalizing layers ...\n" ); 
+    _relayer(\*STDOUT, $layers{stdout});
+    _relayer(\*STDERR, $layers{stderr}) unless $merge;
+    _debug( "# running code $code ...\n" ); 
+    $code->();
+    $exit_code = $?; # save this for later
+  }
   # restore prior filehandles and shut down tees
   _debug( "# restoring ...\n" ); 
   _open_std( $stash->{old} );
   _close( $_ ) for values %{$stash->{old}}; # don't leak fds
-  _close( $_ ) for values %proxy_std;
+  _unproxy( %proxy_std );
   _kill_tees( $stash ) if $tee_stdout || $tee_stderr;
   # return captured output
+  _relayer($stash->{capture}{stdout}, $layers{stdout});
+  _relayer($stash->{capture}{stderr}, $layers{stderr}) unless $merge;
+  _debug( "# slurping captured $_ with layers: @{[PerlIO::get_layers($stash->{capture}{$_})]}\n") for qw/stdout stderr/;
   my $got_out = _slurp($stash->{capture}{stdout});
   my $got_err = $merge ? q() : _slurp($stash->{capture}{stderr});
+  print CT_ORIG_STDOUT $got_out if $localize{stdout} && $tee_stdout; 
+  print CT_ORIG_STDERR $got_err if !$merge && $localize{stderr} && $tee_stdout; 
+  $? = $exit_code;
+  _debug( "# ending _capture_tee with (@_)...\n" ); 
   return $got_out if $merge;
   return wantarray ? ($got_out, $got_err) : $got_out;
 }
@@ -237,13 +341,13 @@ This documentation describes version %%VERSION%%.
 = SYNOPSIS
 
     use Capture::Tiny qw/capture tee capture_merged tee_merged/;
-    
+
     ($stdout, $stderr) = capture {
       # your code here
     };
 
     ($stdout, $stderr) = tee {
-      # your code here 
+      # your code here
     };
 
     $merged = capture_merged {
@@ -263,7 +367,7 @@ captured while being passed through to the original handles.  Yes, it even
 works on Windows.  Stop guessing which of a dozen capturing modules to use in
 any particular situation and just use this one.
 
-This module was heavily inspired by [IO::CaptureOutput], which provides 
+This module was heavily inspired by [IO::CaptureOutput], which provides
 similar functionality without the ability to tee output and with more
 complicated code and API.
 
@@ -298,7 +402,7 @@ executing the function.)  If no output was received, returns an empty string.
 As with {capture} it may be called in block form.
 
 Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
-properly ordered due to buffering
+properly ordered due to buffering.
 
 == tee
 
@@ -318,13 +422,23 @@ is captured as well as passed on to STDOUT.  As with {capture} it may be called
 in block form.
 
 Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
-properly ordered due to buffering
+properly ordered due to buffering.
 
 = LIMITATIONS
 
-Portability is a goal, not a guarantee.  {tee} requires fork, except on 
+== Portability
+
+Portability is a goal, not a guarantee.  {tee} requires fork, except on
 Windows where {system(1, @cmd)} is used instead.  Not tested on any
-esoteric platforms yet.  
+particularly esoteric platforms yet.
+
+== PerlIO layers
+
+Capture::Tiny does it's best to preserve PerlIO layers such as ':utf8' or
+':crlf' when capturing.   Layers should be applied to STDOUT or STDERR ~before~
+the call to {capture} or {tee}.
+
+== Closed STDIN, STDOUT or STDERR
 
 Capture::Tiny will work even if STDIN, STDOUT or STDERR have been previously
 closed.  However, since they may be reopened to capture or tee output, any code
@@ -332,10 +446,38 @@ within the captured block that depends on finding them closed will, of course,
 not find them to be closed.  If they started closed, Capture::Tiny will reclose
 them again when the capture block finishes.
 
+==  Scalar filehandles and STDIN, STDOUT or STDERR
+
+If STDOUT or STDERR are reopened to scalar filehandles prior to the call to
+{capture} or {tee}, then Capture::Tiny will override the output handle for the
+duration of the {capture} or {tee} call and then send captured output to the
+output handle after the capture is complete.  (Requires Perl 5.8)
+
+Capture::Tiny attempts to preserve the semantics of STDIN opened to a scalar
+reference.
+
+==  Tied STDIN, STDOUT or STDERR
+
+If STDOUT or STDERR are tied prior to the call to {capture} or {tee}, then
+Capture::Tiny will attempt to override the tie for the duration of the
+{capture} or {tee} call and then send captured output to the tied handle after
+the capture is complete.  (Requires Perl 5.8)
+
+Capture::Tiny does not (yet) support resending utf8 encoded data to a tied
+STDOUT or STDERR handle.  Characters will appear as bytes.
+
+Capture::Tiny attempts to preserve the semantics of tied STDIN, but capturing
+or teeing when STDIN is tied is currently broken on Windows.
+
+== Modifiying STDIN, STDOUT or STDERR during a capture
+
+Attempting to modify STDIN, STDOUT or STDERR ~during~ {capture} or {tee} is
+almost certainly going to cause problems.  Don't do that.
+
 = BUGS
 
-Please report any bugs or feature requests using the CPAN Request Tracker.  
-Bugs can be submitted through the web interface at 
+Please report any bugs or feature requests using the CPAN Request Tracker.
+Bugs can be submitted through the web interface at
 [http://rt.cpan.org/Dist/Display.html?Queue=Capture-Tiny]
 
 When submitting a bug or request, please include a test-file or a patch to an
@@ -346,7 +488,7 @@ existing test-file that illustrates the bug or desired feature.
 This is a selection of CPAN modules that provide some sort of output capture,
 albeit with various limitations that make them appropriate only in particular
 circumstances.  I'm probably missing some.  The long list is provided to show
-why I felt Capture::Tiny was necessary. 
+why I felt Capture::Tiny was necessary.
 
 * [IO::Capture]
 * [IO::Capture::Extended]
@@ -378,10 +520,10 @@ David A. Golden (DAGOLDEN)
 
 Copyright (c) 2009 by David A. Golden. All rights reserved.
 
-Licensed under Apache License, Version 2.0 (the "License").
-You may not use this file except in compliance with the License.
-A copy of the License was distributed with this file or you may obtain a 
-copy of the License from http://www.apache.org/licenses/LICENSE-2.0
+Licensed under Apache License, Version 2.0 (the "License").  You may not use
+this file except in compliance with the License.  A copy of the License was
+distributed with this file or you may obtain a copy of the License from
+http://www.apache.org/licenses/LICENSE-2.0
 
 Files produced as output though the use of this software, shall not be
 considered Derivative Works, but shall be considered the original work of the

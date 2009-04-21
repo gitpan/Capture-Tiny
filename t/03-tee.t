@@ -8,17 +8,24 @@ use strict;
 use warnings;
 use Test::More;
 use t::lib::Utils qw/next_fd/;
-use t::lib::Tests qw/tee_tests tee_count/;
+use t::lib::Cases qw/run_test/;
 
 use Config;
-if ( $^O ne 'MSWin32' && ! $Config{d_fork} ) {
-  plan skip_all => "requires working fork()";
+my $no_fork = $^O ne 'MSWin32' && ! $Config{d_fork};
+if ( $no_fork ) {
+  plan skip_all => 'tee() requires fork';
+}
+else {
+  plan 'no_plan';
 }
 
-plan tests => 1 + tee_count();
+my $builder = Test::More->builder;
+binmode($builder->failure_output, ':utf8') if $] >= 5.008;
 
 my $fd = next_fd;
 
-tee_tests();
+run_test('tee');
+run_test('tee_scalar');
+run_test('tee_merged');
 
 is( next_fd, $fd, "no file descriptors leaked" );

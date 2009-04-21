@@ -8,12 +8,17 @@ use strict;
 use warnings;
 use Test::More;
 use t::lib::Utils qw/next_fd/;
-use t::lib::Tests qw/capture_tests capture_count/;
+use t::lib::Cases qw/run_test/;
 
-plan tests => 1 + capture_count(); 
+plan 'no_plan';
+
+my $builder = Test::More->builder;
+binmode($builder->failure_output, ':utf8') if $] >= 5.008;
 
 my $fd = next_fd;
 
-capture_tests();
+run_test('capture');
+run_test('capture_scalar');
+run_test('capture_merged');
 
 is( next_fd, $fd, "no file descriptors leaked" );

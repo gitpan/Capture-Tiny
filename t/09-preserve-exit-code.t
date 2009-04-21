@@ -7,36 +7,31 @@
 use strict;
 use warnings;
 use Test::More;
-use t::lib::Utils qw/save_std restore_std next_fd/;
-use t::lib::Cases qw/run_test/;
-
+use t::lib::Utils qw/next_fd sig_num/;
+use Capture::Tiny qw/capture/;
 use Config;
-my $no_fork = $^O ne 'MSWin32' && ! $Config{d_fork};
 
-plan 'no_plan';
+plan tests => 4;
 
 my $builder = Test::More->builder;
 binmode($builder->failure_output, ':utf8') if $] >= 5.008;
 
-save_std(qw/stderr/);
-ok( close STDERR, "closed STDERR" );
-
 my $fd = next_fd;
 
-run_test($_) for qw(
-  capture
-  capture_scalar
-  capture_merged
-);
+capture {
+  system($^X, '-e', 'exit 42');
+};
+is( $? >> 8, 42, "exit code was 42" );
 
-if ( ! $no_fork ) {
-  run_test($_) for qw(
-    tee
-    tee_scalar
-    tee_merged
-  );
+SKIP: {
+  skip "alarm() not available", 1
+    unless $Config{d_alarm};
+
+  capture {
+    system($^X, '-e', 'alarm 1; $now = time; 1 while (time - $now < 5)');
+  };
+  ok( $?, '$? is non-zero' );
+  is( ($^O eq 'MSWin32' ? $? >> 8 : $? & 127), sig_num('ALRM'), "caught SIGALRM" );
 }
 
 is( next_fd, $fd, "no file descriptors leaked" );
-restore_std(qw/stderr/);
-

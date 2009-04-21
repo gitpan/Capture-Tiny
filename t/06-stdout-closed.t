@@ -7,35 +7,36 @@
 use strict;
 use warnings;
 use Test::More;
+use t::lib::Utils qw/save_std restore_std next_fd/;
+use t::lib::Cases qw/run_test/;
+
 use Config;
-use t::lib::Utils qw/save_std restore_std/;
-use t::lib::Tests qw(
-  capture_tests           capture_count
-  capture_merged_tests    capture_merged_count
-  tee_tests               tee_count
-  tee_merged_tests        tee_merged_count
-);
-
-#--------------------------------------------------------------------------#
-
-plan tests => 1 + capture_count() + capture_merged_count() 
-                + tee_count() + tee_merged_count(); 
-
 my $no_fork = $^O ne 'MSWin32' && ! $Config{d_fork};
 
-#--------------------------------------------------------------------------#
+plan 'no_plan';
+
+my $builder = Test::More->builder;
+binmode($builder->failure_output, ':utf8') if $] >= 5.008;
 
 save_std(qw/stdout/);
 ok( close STDOUT, "closed STDOUT" );
 
-capture_tests();
-capture_merged_tests();
+my $fd = next_fd;
 
-SKIP: {
-  skip tee_count() + tee_merged_count, "requires working fork()" if $no_fork;
-  tee_tests();
-  tee_merged_tests();
+run_test($_) for qw(
+  capture
+  capture_scalar
+  capture_merged
+);
+
+if ( ! $no_fork ) {
+  run_test($_) for qw(
+    tee
+    tee_scalar
+    tee_merged
+  );
 }
 
+is( next_fd, $fd, "no file descriptors leaked" );
 restore_std(qw/stdout/);
 

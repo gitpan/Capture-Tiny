@@ -13,6 +13,9 @@ use t::lib::Cases qw/run_test/;
 use Config;
 my $no_fork = $^O ne 'MSWin32' && ! $Config{d_fork};
 
+plan skip_all => "In memory files require Perl 5.8"
+  if $] < 5.008;
+
 plan 'no_plan';
 
 my $builder = Test::More->builder;
@@ -20,6 +23,7 @@ binmode($builder->failure_output, ':utf8') if $] >= 5.008;
 
 save_std(qw/stderr/);
 ok( close STDERR, "closed STDERR" );
+ok( open( STDERR, ">", \(my $stderr_buf)), "reopened STDERR to string" ); 
 
 my $fd = next_fd;
 
@@ -39,4 +43,5 @@ if ( ! $no_fork ) {
 
 is( next_fd, $fd, "no file descriptors leaked" );
 restore_std(qw/stderr/);
+
 

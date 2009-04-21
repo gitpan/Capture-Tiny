@@ -9,17 +9,26 @@ use warnings;
 use Test::More;
 use t::lib::Utils qw/save_std restore_std next_fd/;
 use t::lib::Cases qw/run_test/;
+use t::lib::TieLC;
 
 use Config;
 my $no_fork = $^O ne 'MSWin32' && ! $Config{d_fork};
+
+plan skip_all => "capture needs Perl 5.8 for tied STDERR"
+  if $] < 5.008;
+
+plan skip_all => "not supported on Windows yet"
+  if $^O eq 'MSWin32';
 
 plan 'no_plan';
 
 my $builder = Test::More->builder;
 binmode($builder->failure_output, ':utf8') if $] >= 5.008;
 
-save_std(qw/stderr/);
-ok( close STDERR, "closed STDERR" );
+save_std(qw/stdin/);
+tie *STDIN, 't::lib::TieLC', ">&=STDIN";
+my $orig_tie = tied *STDIN;
+ok( $orig_tie, "STDIN is tied" );
 
 my $fd = next_fd;
 
@@ -38,5 +47,6 @@ if ( ! $no_fork ) {
 }
 
 is( next_fd, $fd, "no file descriptors leaked" );
-restore_std(qw/stderr/);
+is( tied *STDIN, $orig_tie, "STDIN is still tied" );
+restore_std(qw/stdin/);
 

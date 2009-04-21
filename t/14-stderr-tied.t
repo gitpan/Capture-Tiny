@@ -9,28 +9,35 @@ use warnings;
 use Test::More;
 use t::lib::Utils qw/save_std restore_std next_fd/;
 use t::lib::Cases qw/run_test/;
+use t::lib::TieLC;
 
 use Config;
 my $no_fork = $^O ne 'MSWin32' && ! $Config{d_fork};
+
+plan skip_all => "capture needs Perl 5.8 for tied STDERR"
+  if $] < 5.008;
 
 plan 'no_plan';
 
 my $builder = Test::More->builder;
 binmode($builder->failure_output, ':utf8') if $] >= 5.008;
+binmode($builder->todo_output, ':utf8') if $] >= 5.008;
 
 save_std(qw/stderr/);
-ok( close STDERR, "closed STDERR" );
+tie *STDERR, 't::lib::TieLC', ">&=STDERR";
+my $orig_tie = tied *STDERR;
+ok( $orig_tie, "STDERR is tied" );
 
 my $fd = next_fd;
 
-run_test($_) for qw(
+run_test($_, 'unicode') for qw(
   capture
   capture_scalar
   capture_merged
 );
 
 if ( ! $no_fork ) {
-  run_test($_) for qw(
+  run_test($_, 'unicode') for qw(
     tee
     tee_scalar
     tee_merged
@@ -38,5 +45,6 @@ if ( ! $no_fork ) {
 }
 
 is( next_fd, $fd, "no file descriptors leaked" );
+is( tied *STDERR, $orig_tie, "STDERR is still tied" );
 restore_std(qw/stderr/);
 
