@@ -3,26 +3,26 @@ NAME
     programs
 
 VERSION
-    This documentation describes version 0.08.
+    version 0.09
 
 SYNOPSIS
-         use Capture::Tiny qw/capture tee capture_merged tee_merged/;
+       use Capture::Tiny qw/capture tee capture_merged tee_merged/;
  
-         ($stdout, $stderr) = capture {
-           # your code here
-         };
+       ($stdout, $stderr) = capture {
+         # your code here
+       };
  
-         ($stdout, $stderr) = tee {
-           # your code here
-         };
+       ($stdout, $stderr) = tee {
+         # your code here
+       };
  
-         $merged = capture_merged {
-           # your code here
-         };
+       $merged = capture_merged {
+         # your code here
+       };
  
-         $merged = tee_merged {
-           # your code here
-         };
+       $merged = tee_merged {
+         # your code here
+       };
 
 DESCRIPTION
     Capture::Tiny provides a simple, portable way to capture anything sent
@@ -132,6 +132,14 @@ LIMITATIONS
   No support for Perl 5.8.0
     It's just too buggy when it comes to layers and UTF8.
 
+ENVIRONMENT
+  PERL_CAPTURE_TINY_TIMEOUT
+    Capture::Tiny uses subprocesses for "tee". By default, Capture::Tiny
+    will timeout with an error if the subprocesses are not ready to receive
+    data within 30 seconds (or whatever is the value of
+    $Capture::Tiny::TIMEOUT). An alternate timeout may be specified by
+    setting the "PERL_CAPTURE_TINY_TIMEOUT" environment variable.
+
 BUGS
     Please report any bugs or feature requests using the CPAN Request
     Tracker. Bugs can be submitted through the web interface at
@@ -189,23 +197,12 @@ SEE ALSO
     *   Test::Output
 
 AUTHOR
-    David A. Golden (DAGOLDEN)
+    David Golden <dagolden@cpan.org>
 
 COPYRIGHT AND LICENSE
-    Copyright (c) 2009 by David A. Golden. All rights reserved.
+    This software is Copyright (c) 2009 by David Golden.
 
-    Licensed under Apache License, Version 2.0 (the "License"). You may not
-    use this file except in compliance with the License. A copy of the
-    License was distributed with this file or you may obtain a copy of the
-    License from http://www.apache.org/licenses/LICENSE-2.0
+    This is free software, licensed under:
 
-    Files produced as output though the use of this software, shall not be
-    considered Derivative Works, but shall be considered the original work
-    of the Licensor.
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+      The Apache License, Version 2.0, January 2004
 

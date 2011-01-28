@@ -1,13 +1,20 @@
-# Copyright (c) 2009 by David Golden. All rights reserved.
-# Licensed under Apache License, Version 2.0 (the "License").
-# You may not use this file except in compliance with the License.
-# A copy of the License was distributed with this file or you may obtain a
-# copy of the License from http://www.apache.org/licenses/LICENSE-2.0
-
-package Capture::Tiny;
+#
+# This file is part of Capture-Tiny
+#
+# This software is Copyright (c) 2009 by David Golden.
+#
+# This is free software, licensed under:
+#
+#   The Apache License, Version 2.0, January 2004
+#
 use 5.006;
 use strict;
 use warnings;
+package Capture::Tiny;
+BEGIN {
+  $Capture::Tiny::VERSION = '0.09';
+}
+# ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -15,12 +22,11 @@ use File::Spec ();
 use File::Temp qw/tempfile tmpnam/;
 # Get PerlIO or fake it
 BEGIN {
+  local $@;
   eval { require PerlIO; PerlIO->can('get_layers') }
     or *PerlIO::get_layers = sub { return () };
 }
 
-our $VERSION = '0.08';
-$VERSION = eval $VERSION; ## no critic
 our @ISA = qw/Exporter/;
 our @EXPORT_OK = qw/capture capture_merged tee tee_merged/;
 our %EXPORT_TAGS = ( 'all' => \@EXPORT_OK );
@@ -32,6 +38,8 @@ my $DEBUGFH;
 open $DEBUGFH, ">&STDERR" if $DEBUG;
 
 *_debug = $DEBUG ? sub(@) { print {$DEBUGFH} @_ } : sub(){0};
+
+our $TIMEOUT = 30;
 
 #--------------------------------------------------------------------------#
 # command to tee output -- the argument is a filename that must
@@ -177,6 +185,7 @@ sub _start_tee {
   $stash->{flag_files}{$which} = scalar tmpnam();
   # execute @cmd as a separate process
   if ( $IS_WIN32 ) {
+    local $@;
     eval "use Win32API::File qw/CloseHandle GetOsFHandle SetHandleInformation fileLastError HANDLE_FLAG_INHERIT INVALID_HANDLE_VALUE/ ";
     _debug( "# Win32API::File loaded\n") unless $@;
     my $os_fhandle = GetOsFHandle( $stash->{tee}{$which} );
@@ -220,7 +229,8 @@ sub _wait_for_tees {
   my ($stash) = @_;
   my $start = time;
   my @files = values %{$stash->{flag_files}};
-  1 until _files_exist(@files) || (time - $start > 30);
+  my $timeout = $ENV{PERL_CAPTURE_TINY_TIMEOUT} || $TIMEOUT;
+  1 until _files_exist(@files) || ($TIMEOUT && (time - $start > $timeout));
   Carp::confess "Timed out waiting for subprocesses to start" if ! _files_exist(@files);
   unlink $_ for @files;
 }
@@ -293,7 +303,7 @@ sub _capture_tee {
   _debug( "# redirecting in parent ...\n" );
   _open_std( $stash->{new} );
   # execute user provided code
-  my ($exit_code, $error);
+  my ($exit_code, $inner_error, $outer_error);
   {
     local *STDIN = *CT_ORIG_STDIN if $localize{stdin}; # get original, not proxy STDIN
     local *STDERR = *STDOUT if $merge; # minimize buffer mixups during $code
@@ -301,9 +311,10 @@ sub _capture_tee {
     _relayer(\*STDOUT, $layers{stdout});
     _relayer(\*STDERR, $layers{stderr}) unless $merge;
     _debug( "# running code $code ...\n" );
-    eval { $code->() };
+    local $@;
+    eval { $code->(); $inner_error = $@ };
     $exit_code = $?; # save this for later
-    $error = $@; # save this for later
+    $outer_error = $@; # save this for later
   }
   # restore prior filehandles and shut down tees
   _debug( "# restoring ...\n" );
@@ -320,7 +331,8 @@ sub _capture_tee {
   print CT_ORIG_STDOUT $got_out if $localize{stdout} && $tee_stdout;
   print CT_ORIG_STDERR $got_err if !$merge && $localize{stderr} && $tee_stdout;
   $? = $exit_code;
-  die $error if $error;
+  $@ = $inner_error if $inner_error;
+  die $outer_error if $outer_error;
   _debug( "# ending _capture_tee with (@_)...\n" );
   return $got_out if $merge;
   return wantarray ? ($got_out, $got_err) : $got_out;
@@ -344,39 +356,39 @@ for my $sub ( keys %api ) {
 
 1;
 
-__END__
 
-=begin wikidoc
 
-= NAME
+=pod
+
+=head1 NAME
 
 Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
-= VERSION
+=head1 VERSION
 
-This documentation describes version %%VERSION%%.
+version 0.09
 
-= SYNOPSIS
+=head1 SYNOPSIS
 
-    use Capture::Tiny qw/capture tee capture_merged tee_merged/;
+   use Capture::Tiny qw/capture tee capture_merged tee_merged/;
+ 
+   ($stdout, $stderr) = capture {
+     # your code here
+   };
+ 
+   ($stdout, $stderr) = tee {
+     # your code here
+   };
+ 
+   $merged = capture_merged {
+     # your code here
+   };
+ 
+   $merged = tee_merged {
+     # your code here
+   };
 
-    ($stdout, $stderr) = capture {
-      # your code here
-    };
-
-    ($stdout, $stderr) = tee {
-      # your code here
-    };
-
-    $merged = capture_merged {
-      # your code here
-    };
-
-    $merged = tee_merged {
-      # your code here
-    };
-
-= DESCRIPTION
+=head1 DESCRIPTION
 
 Capture::Tiny provides a simple, portable way to capture anything sent to
 STDOUT or STDERR, regardless of whether it comes from Perl, from XS code or
@@ -385,20 +397,20 @@ captured while being passed through to the original handles.  Yes, it even
 works on Windows.  Stop guessing which of a dozen capturing modules to use in
 any particular situation and just use this one.
 
-This module was heavily inspired by [IO::CaptureOutput], which provides
+This module was heavily inspired by L<IO::CaptureOutput>, which provides
 similar functionality without the ability to tee output and with more
 complicated code and API.
 
-= USAGE
+=head1 USAGE
 
 The following functions are available.  None are exported by default.
 
-== capture
+=head2 capture
 
-  ($stdout, $stderr) = capture \&code;
-  $stdout = capture \&code;
+   ($stdout, $stderr) = capture \&code;
+   $stdout = capture \&code;
 
-The {capture} function takes a code reference and returns what is sent to
+The C<<< capture >>> function takes a code reference and returns what is sent to
 STDOUT and STDERR.  In scalar context, it returns only STDOUT.  If no output
 was received, returns an empty string.  Regardless of context, all output is
 captured -- nothing is passed to the existing handles.
@@ -406,57 +418,57 @@ captured -- nothing is passed to the existing handles.
 It is prototyped to take a subroutine reference as an argument. Thus, it
 can be called in block form:
 
-  ($stdout, $stderr) = capture {
-    # your code here ...
-  };
+   ($stdout, $stderr) = capture {
+     # your code here ...
+   };
 
-== capture_merged
+=head2 capture_merged
 
-  $merged = capture_merged \&code;
+   $merged = capture_merged \&code;
 
-The {capture_merged} function works just like {capture} except STDOUT and
+The C<<< capture_merged >>> function works just like C<<< capture >>> except STDOUT and
 STDERR are merged. (Technically, STDERR is redirected to STDOUT before
 executing the function.)  If no output was received, returns an empty string.
-As with {capture} it may be called in block form.
+As with C<<< capture >>> it may be called in block form.
 
 Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
 properly ordered due to buffering.
 
-== tee
+=head2 tee
 
-  ($stdout, $stderr) = tee \&code;
-  $stdout = tee \&code;
+   ($stdout, $stderr) = tee \&code;
+   $stdout = tee \&code;
 
-The {tee} function works just like {capture}, except that output is captured
-as well as passed on to the original STDOUT and STDERR.  As with {capture} it
+The C<<< tee >>> function works just like C<<< capture >>>, except that output is captured
+as well as passed on to the original STDOUT and STDERR.  As with C<<< capture >>> it
 may be called in block form.
 
-== tee_merged
+=head2 tee_merged
 
-  $merged = tee_merged \&code;
+   $merged = tee_merged \&code;
 
-The {tee_merged} function works just like {capture_merged} except that output
-is captured as well as passed on to STDOUT.  As with {capture} it may be called
+The C<<< tee_merged >>> function works just like C<<< capture_merged >>> except that output
+is captured as well as passed on to STDOUT.  As with C<<< capture >>> it may be called
 in block form.
 
 Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
 properly ordered due to buffering.
 
-= LIMITATIONS
+=head1 LIMITATIONS
 
-== Portability
+=head2 Portability
 
-Portability is a goal, not a guarantee.  {tee} requires fork, except on
-Windows where {system(1, @cmd)} is used instead.  Not tested on any
+Portability is a goal, not a guarantee.  C<<< tee >>> requires fork, except on
+Windows where C<<< system(1, @cmd) >>> is used instead.  Not tested on any
 particularly esoteric platforms yet.
 
-== PerlIO layers
+=head2 PerlIO layers
 
 Capture::Tiny does it's best to preserve PerlIO layers such as ':utf8' or
-':crlf' when capturing.   Layers should be applied to STDOUT or STDERR ~before~
-the call to {capture} or {tee}.
+':crlf' when capturing.   Layers should be applied to STDOUT or STDERR I<before>
+the call to C<<< capture >>> or C<<< tee >>>.
 
-== Closed STDIN, STDOUT or STDERR
+=head2 Closed STDIN, STDOUT or STDERR
 
 Capture::Tiny will work even if STDIN, STDOUT or STDERR have been previously
 closed.  However, since they may be reopened to capture or tee output, any code
@@ -464,21 +476,21 @@ within the captured block that depends on finding them closed will, of course,
 not find them to be closed.  If they started closed, Capture::Tiny will reclose
 them again when the capture block finishes.
 
-==  Scalar filehandles and STDIN, STDOUT or STDERR
+=head2 Scalar filehandles and STDIN, STDOUT or STDERR
 
 If STDOUT or STDERR are reopened to scalar filehandles prior to the call to
-{capture} or {tee}, then Capture::Tiny will override the output handle for the
-duration of the {capture} or {tee} call and then send captured output to the
+C<<< capture >>> or C<<< tee >>>, then Capture::Tiny will override the output handle for the
+duration of the C<<< capture >>> or C<<< tee >>> call and then send captured output to the
 output handle after the capture is complete.  (Requires Perl 5.8)
 
 Capture::Tiny attempts to preserve the semantics of STDIN opened to a scalar
 reference.
 
-==  Tied STDIN, STDOUT or STDERR
+=head2 Tied STDIN, STDOUT or STDERR
 
-If STDOUT or STDERR are tied prior to the call to {capture} or {tee}, then
+If STDOUT or STDERR are tied prior to the call to C<<< capture >>> or C<<< tee >>>, then
 Capture::Tiny will attempt to override the tie for the duration of the
-{capture} or {tee} call and then send captured output to the tied handle after
+C<<< capture >>> or C<<< tee >>> call and then send captured output to the tied handle after
 the capture is complete.  (Requires Perl 5.8)
 
 Capture::Tiny does not (yet) support resending utf8 encoded data to a tied
@@ -487,77 +499,144 @@ STDOUT or STDERR handle.  Characters will appear as bytes.
 Capture::Tiny attempts to preserve the semantics of tied STDIN, but capturing
 or teeing when STDIN is tied is currently broken on Windows.
 
-== Modifiying STDIN, STDOUT or STDERR during a capture
+=head2 Modifiying STDIN, STDOUT or STDERR during a capture
 
-Attempting to modify STDIN, STDOUT or STDERR ~during~ {capture} or {tee} is
+Attempting to modify STDIN, STDOUT or STDERR I<during> C<<< capture >>> or C<<< tee >>> is
 almost certainly going to cause problems.  Don't do that.
 
-== No support for Perl 5.8.0
+=head2 No support for Perl 5.8.0
 
 It's just too buggy when it comes to layers and UTF8.
 
-= BUGS
+=head1 ENVIRONMENT
+
+=head2 PERL_CAPTURE_TINY_TIMEOUT
+
+Capture::Tiny uses subprocesses for C<<< tee >>>.  By default, Capture::Tiny will
+timeout with an error if the subprocesses are not ready to receive data within
+30 seconds (or whatever is the value of C<<< $Capture::Tiny::TIMEOUT >>>).  An
+alternate timeout may be specified by setting the C<<< PERL_CAPTURE_TINY_TIMEOUT >>>
+environment variable.
+
+=head1 BUGS
 
 Please report any bugs or feature requests using the CPAN Request Tracker.
 Bugs can be submitted through the web interface at
-[http://rt.cpan.org/Dist/Display.html?Queue=Capture-Tiny]
+L<http://rt.cpan.org/Dist/Display.html?Queue=Capture-Tiny>
 
 When submitting a bug or request, please include a test-file or a patch to an
 existing test-file that illustrates the bug or desired feature.
 
-= SEE ALSO
+=head1 SEE ALSO
 
 This is a selection of CPAN modules that provide some sort of output capture,
 albeit with various limitations that make them appropriate only in particular
 circumstances.  I'm probably missing some.  The long list is provided to show
 why I felt Capture::Tiny was necessary.
 
-* [IO::Capture]
-* [IO::Capture::Extended]
-* [IO::CaptureOutput]
-* [IPC::Capture]
-* [IPC::Cmd]
-* [IPC::Open2]
-* [IPC::Open3]
-* [IPC::Open3::Simple]
-* [IPC::Open3::Utils]
-* [IPC::Run]
-* [IPC::Run::SafeHandles]
-* [IPC::Run::Simple]
-* [IPC::Run3]
-* [IPC::System::Simple]
-* [Tee]
-* [IO::Tee]
-* [File::Tee]
-* [Filter::Handle]
-* [Tie::STDERR]
-* [Tie::STDOUT]
-* [Test::Output]
+=over
 
-= AUTHOR
+=item *
 
-David A. Golden (DAGOLDEN)
+L<IO::Capture>
 
-= COPYRIGHT AND LICENSE
+=item *
 
-Copyright (c) 2009 by David A. Golden. All rights reserved.
+L<IO::Capture::Extended>
 
-Licensed under Apache License, Version 2.0 (the "License").  You may not use
-this file except in compliance with the License.  A copy of the License was
-distributed with this file or you may obtain a copy of the License from
-http://www.apache.org/licenses/LICENSE-2.0
+=item *
 
-Files produced as output though the use of this software, shall not be
-considered Derivative Works, but shall be considered the original work of the
-Licensor.
+L<IO::CaptureOutput>
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+=item *
 
-=end wikidoc
+L<IPC::Capture>
+
+=item *
+
+L<IPC::Cmd>
+
+=item *
+
+L<IPC::Open2>
+
+=item *
+
+L<IPC::Open3>
+
+=item *
+
+L<IPC::Open3::Simple>
+
+=item *
+
+L<IPC::Open3::Utils>
+
+=item *
+
+L<IPC::Run>
+
+=item *
+
+L<IPC::Run::SafeHandles>
+
+=item *
+
+L<IPC::Run::Simple>
+
+=item *
+
+L<IPC::Run3>
+
+=item *
+
+L<IPC::System::Simple>
+
+=item *
+
+L<Tee>
+
+=item *
+
+L<IO::Tee>
+
+=item *
+
+L<File::Tee>
+
+=item *
+
+L<Filter::Handle>
+
+=item *
+
+L<Tie::STDERR>
+
+=item *
+
+L<Tie::STDOUT>
+
+=item *
+
+L<Test::Output>
+
+=back
+
+=head1 AUTHOR
+
+David Golden <dagolden@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2009 by David Golden.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
 
 =cut
+
+
+__END__
+
 
