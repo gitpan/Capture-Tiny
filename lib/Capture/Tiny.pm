@@ -12,7 +12,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 BEGIN {
-  $Capture::Tiny::VERSION = '0.09';
+  $Capture::Tiny::VERSION = '0.10';
 }
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
 use Carp ();
@@ -229,8 +229,9 @@ sub _wait_for_tees {
   my ($stash) = @_;
   my $start = time;
   my @files = values %{$stash->{flag_files}};
-  my $timeout = $ENV{PERL_CAPTURE_TINY_TIMEOUT} || $TIMEOUT;
-  1 until _files_exist(@files) || ($TIMEOUT && (time - $start > $timeout));
+  my $timeout = defined $ENV{PERL_CAPTURE_TINY_TIMEOUT}
+              ? $ENV{PERL_CAPTURE_TINY_TIMEOUT} : $TIMEOUT;
+  1 until _files_exist(@files) || ($timeout && (time - $start > $timeout));
   Carp::confess "Timed out waiting for subprocesses to start" if ! _files_exist(@files);
   unlink $_ for @files;
 }
@@ -366,7 +367,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.09
+version 0.10
 
 =head1 SYNOPSIS
 
@@ -516,7 +517,7 @@ Capture::Tiny uses subprocesses for C<<< tee >>>.  By default, Capture::Tiny wil
 timeout with an error if the subprocesses are not ready to receive data within
 30 seconds (or whatever is the value of C<<< $Capture::Tiny::TIMEOUT >>>).  An
 alternate timeout may be specified by setting the C<<< PERL_CAPTURE_TINY_TIMEOUT >>>
-environment variable.
+environment variable.  Setting it to zero will disable timeouts.
 
 =head1 BUGS
 
@@ -621,6 +622,25 @@ L<Tie::STDOUT>
 L<Test::Output>
 
 =back
+
+=for :stopwords cpan testmatrix url annocpan anno bugtracker rt cpants kwalitee diff irc mailto metadata placeholders
+
+=head1 SUPPORT
+
+=head2 Bugs / Feature Requests
+
+Please report any bugs or feature requests by email to C<bug-capture-tiny at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>. You will be automatically notified of any
+progress on the request by the system.
+
+=head2 Source Code
+
+This is open source software.  The code repository is available for
+public review and contribution under the terms of the license.
+
+L<http://github.com/dagolden/capture-tiny/tree>
+
+  git clone git://github.com/dagolden/capture-tiny.git
 
 =head1 AUTHOR
 

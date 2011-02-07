@@ -3,7 +3,7 @@ NAME
     programs
 
 VERSION
-    version 0.09
+    version 0.10
 
 SYNOPSIS
        use Capture::Tiny qw/capture tee capture_merged tee_merged/;
@@ -138,7 +138,8 @@ ENVIRONMENT
     will timeout with an error if the subprocesses are not ready to receive
     data within 30 seconds (or whatever is the value of
     $Capture::Tiny::TIMEOUT). An alternate timeout may be specified by
-    setting the "PERL_CAPTURE_TINY_TIMEOUT" environment variable.
+    setting the "PERL_CAPTURE_TINY_TIMEOUT" environment variable. Setting it
+    to zero will disable timeouts.
 
 BUGS
     Please report any bugs or feature requests using the CPAN Request
@@ -195,6 +196,22 @@ SEE ALSO
     *   Tie::STDOUT
 
     *   Test::Output
+
+SUPPORT
+  Bugs / Feature Requests
+    Please report any bugs or feature requests by email to "bug-capture-tiny
+    at rt.cpan.org", or through the web interface at
+    <http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>. You
+    will be automatically notified of any progress on the request by the
+    system.
+
+  Source Code
+    This is open source software. The code repository is available for
+    public review and contribution under the terms of the license.
+
+    <http://github.com/dagolden/capture-tiny/tree>
+
+      git clone git://github.com/dagolden/capture-tiny.git
 
 AUTHOR
     David Golden <dagolden@cpan.org>
