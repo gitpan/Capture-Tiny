@@ -12,7 +12,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 BEGIN {
-  $Capture::Tiny::VERSION = '0.10';
+  $Capture::Tiny::VERSION = '0.11';
 }
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
 use Carp ();
@@ -367,7 +367,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.10
+version 0.11
 
 =head1 SYNOPSIS
 

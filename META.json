@@ -3,8 +3,8 @@
    "author" : [
       "David Golden <dagolden@cpan.org>"
    ],
-   "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 4.200002, CPAN::Meta::Converter version 2.110330",
+   "dynamic_config" : 1,
+   "generated_by" : "Dist::Zilla version 4.200005, CPAN::Meta::Converter version 2.110580",
    "license" : [
       "apache_2_0"
    ],
@@ -51,7 +51,7 @@
    "provides" : {
       "Capture::Tiny" : {
          "file" : "lib/Capture/Tiny.pm",
-         "version" : "0.10"
+         "version" : "0.11"
       }
    },
    "release_status" : "stable",
@@ -67,6 +67,6 @@
          "web" : "http://github.com/dagolden/capture-tiny/tree"
       }
    },
-   "version" : "0.10"
+   "version" : "0.11"
 }
 

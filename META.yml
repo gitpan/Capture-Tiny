@@ -8,8 +8,8 @@ build_requires:
   Test::More: 0.62
 configure_requires:
   ExtUtils::MakeMaker: 6.31
-dynamic_config: 0
-generated_by: 'Dist::Zilla version 4.200002, CPAN::Meta::Converter version 2.110330'
+dynamic_config: 1
+generated_by: 'Dist::Zilla version 4.200005, CPAN::Meta::Converter version 2.110580'
 license: apache
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -26,7 +26,7 @@ no_index:
 provides:
   Capture::Tiny:
     file: lib/Capture/Tiny.pm
-    version: 0.10
+    version: 0.11
 requires:
   Carp: 0
   Exporter: 0
@@ -38,4 +38,4 @@ resources:
   bugtracker: http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny
   homepage: http://github.com/dagolden/capture-tiny/tree
   repository: git://github.com/dagolden/capture-tiny.git
-version: 0.10
+version: 0.11
