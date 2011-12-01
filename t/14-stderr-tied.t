@@ -31,16 +31,20 @@ ok( $orig_tie, "STDERR is tied" );
 
 my $fd = next_fd;
 
-run_test($_, 'unicode') for qw(
+run_test($_) for qw(
   capture
   capture_scalar
+  capture_stdout
+  capture_stderr
   capture_merged
 );
 
 if ( ! $no_fork ) {
-  run_test($_, 'unicode') for qw(
+  run_test($_) for qw(
     tee
     tee_scalar
+    tee_stdout
+    tee_stderr
     tee_merged
   );
 }

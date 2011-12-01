@@ -1,5 +1,29 @@
 Revision history for Capture-Tiny
 
+0.12      2011-12-01 16:58:05 EST5EDT
+
+  Added:
+
+  - New functions capture_stdout, capture_stderr, tee_stdout, tee_stderr
+    [rt.cpan.org #60515]
+
+  - Capture functions also returns the return values from the executed
+    coderef [rt.cpan.org #61794, adapted from patch by Christian Walde]
+
+  - Capture functions take optional custom filehandles for capturing
+    via named files instead of anonymous ones [inspired by Christian Walde]
+
+  Fixed:
+
+  - Tied filehandles based on Tie::StdHandle can now use the ":utf8"
+    layer; removed remaining TODO tests; adds Scalar::Util as a dependency
+
+  Changed:
+
+  - When Time::HiRes::usleep is available, tee operations will
+    sleep during the busy-loop waiting for tee processes to be ready
+    [rt.cpan.org #67858]
+
 0.11      2011-05-19 23:34:23 America/New_York
 
   Fixed:

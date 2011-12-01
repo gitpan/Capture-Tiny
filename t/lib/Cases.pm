@@ -1,12 +1,3 @@
-#
-# This file is part of Capture-Tiny
-#
-# This software is Copyright (c) 2009 by David Golden.
-#
-# This is free software, licensed under:
-#
-#   The Apache License, Version 2.0, January 2004
-#
 package Cases;
 use strict;
 use warnings;
@@ -19,8 +10,8 @@ our @EXPORT_OK = qw(
   run_test
 );
 
-my $have_diff = eval { 
-  require Test::Differences; 
+my $have_diff = eval {
+  require Test::Differences;
   Test::Differences->import;
   $Test::Differences::VERSION < 0.60; # 0.60+ is causing strange failures
 };
@@ -40,17 +31,20 @@ sub _set_utf8 {
   my $t = shift;
   return unless $t eq 'unicode';
   my %seen;
-  my @orig_layers = grep {$_ ne 'unix' and $_ ne 'perlio' and $seen{$_}++} PerlIO::get_layers(\*STDOUT);
-  binmode(STDOUT, ":utf8") if fileno(STDOUT); 
-  binmode(STDERR, ":utf8") if fileno(STDERR); 
+  my @orig_layers = (
+    [ grep {$_ ne 'unix' and $_ ne 'perlio' and $seen{stdout}{$_}++} PerlIO::get_layers(\*STDOUT) ],
+    [ grep {$_ ne 'unix' and $_ ne 'perlio' and $seen{stderr}{$_}++} PerlIO::get_layers(\*STDERR) ],
+  );
+  binmode(STDOUT, ":utf8") if fileno(STDOUT);
+  binmode(STDERR, ":utf8") if fileno(STDERR);
   return @orig_layers;
 }
 
 sub _restore_layers {
   my ($t, @orig_layers) = @_;
   return unless $t eq 'unicode';
-  binmode(STDOUT, join( ":", "", "raw", @orig_layers)) if fileno(STDOUT); 
-  binmode(STDERR, join( ":", "", "raw", @orig_layers)) if fileno(STDERR); 
+  binmode(STDOUT, join( ":", "", "raw", @{$orig_layers[0]})) if fileno(STDOUT);
+  binmode(STDERR, join( ":", "", "raw", @{$orig_layers[1]})) if fileno(STDERR);
 }
 
 #--------------------------------------------------------------------------#
@@ -113,6 +107,38 @@ my %tests = (
       _is_or_diff( $got_out, $expected[0], "$l|$m|$c|$t - got STDOUT" );
     },
   },
+  capture_stdout => {
+    cnt   => 3,
+    test  => sub {
+      my ($m, $c, $t, $l) = @_;
+      my ($inner_out, $inner_err);
+      my ($outer_out, $outer_err) = capture {
+        $inner_out = capture_stdout {
+          $methods{$m}->( $channels{$c}{output}->($t) );
+        };
+      };
+      my @expected = $channels{$c}{expect}->($t);
+      _is_or_diff( $inner_out, $expected[0], "$l|$m|$c|$t - inner STDOUT" );
+      _is_or_diff( $outer_out, "",           "$l|$m|$c|$t - outer STDOUT" );
+      _is_or_diff( $outer_err, $expected[1], "$l|$m|$c|$t - outer STDERR" );
+    },
+  },
+  capture_stderr => {
+    cnt   => 3,
+    test  => sub {
+      my ($m, $c, $t, $l) = @_;
+      my ($inner_out, $inner_err);
+      my ($outer_out, $outer_err) = capture {
+        $inner_err = capture_stderr {
+          $methods{$m}->( $channels{$c}{output}->($t) );
+        };
+      };
+      my @expected = $channels{$c}{expect}->($t);
+      _is_or_diff( $inner_err, $expected[1], "$l|$m|$c|$t - inner STDERR" );
+      _is_or_diff( $outer_out, $expected[0], "$l|$m|$c|$t - outer STDOUT" );
+      _is_or_diff( $outer_err, "",           "$l|$m|$c|$t - outer STDERR" );
+    },
+  },
   capture_merged => {
     cnt   => 2,
     test  => sub {
@@ -158,6 +184,38 @@ my %tests = (
       _is_or_diff( $tee_err, $expected[1], "$l|$m|$c|$t - tee STDERR" );
     }
   },
+  tee_stdout => {
+    cnt => 3,
+    test => sub {
+      my ($m, $c, $t, $l) = @_;
+      my ($inner_out, $inner_err);
+      my ($tee_out, $tee_err) = capture {
+        $inner_out = tee_stdout {
+          $methods{$m}->( $channels{$c}{output}->($t) );
+        };
+      };
+      my @expected = $channels{$c}{expect}->($t);
+      _is_or_diff( $inner_out, $expected[0], "$l|$m|$c|$t - inner STDOUT" );
+      _is_or_diff( $tee_out, $expected[0], "$l|$m|$c|$t - teed STDOUT" );
+      _is_or_diff( $tee_err, $expected[1], "$l|$m|$c|$t - unmodified STDERR" );
+    }
+  },
+  tee_stderr => {
+    cnt => 3,
+    test => sub {
+      my ($m, $c, $t, $l) = @_;
+      my ($inner_out, $inner_err);
+      my ($tee_out, $tee_err) = capture {
+        $inner_err = tee_stderr {
+          $methods{$m}->( $channels{$c}{output}->($t) );
+        };
+      };
+      my @expected = $channels{$c}{expect}->($t);
+      _is_or_diff( $inner_err, $expected[1], "$l|$m|$c|$t - inner STDOUT" );
+      _is_or_diff( $tee_out, $expected[0], "$l|$m|$c|$t - unmodified STDOUT" );
+      _is_or_diff( $tee_err, $expected[1], "$l|$m|$c|$t - teed STDERR" );
+    }
+  },
   tee_merged => {
     cnt => 5,
     test => sub {
@@ -195,7 +253,7 @@ sub run_test {
     for my $c ( keys %channels ) {
       for my $t ( keys %texts     ) {
         my @orig_layers = _set_utf8($t);
-        local $TODO = "not yet supported"
+        local $TODO = "not supported on all platforms"
           if $t eq $todo;
         $tests{$test_type}{test}->($m, $c, $t, $test_type);
         _restore_layers($t, @orig_layers);
