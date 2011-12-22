@@ -1,0 +1,132 @@
+# starting _capture_tee with (1 1 0 0 CODE(0x18dea30) stdout IO::File=GLOB(0x14f4de8) stderr IO::File=GLOB(0x1509298))...
+# existing layers for stdin: unix perlio
+# existing layers for stdout: unix perlio
+# existing layers for stderr: unix perlio
+# tied object corrected layers for stdin: unix perlio
+# tied object corrected layers for stdout: unix perlio
+# tied object corrected layers for stderr: unix perlio
+# proxy std: 
+# post-proxy layers for stdin: unix perlio
+# post-proxy layers for stdout: unix perlio
+# post-proxy layers for stderr: unix perlio
+# copying std handles ...
+# open GEN2, <&STDIN as 8
+# open GEN3, >&STDOUT as 9
+# open GEN4, >&STDERR as 10
+# will capture stdout on 3
+# will capture stderr on 5
+# redirecting in parent ...
+# open STDIN, <&8 as 0
+# open STDOUT, >&3 as 1
+# open STDERR, >&5 as 2
+# finalizing layers ...
+# requested layers (unix perlio) for 1
+# applying unique layers () to 1
+# requested layers (unix perlio) for 2
+# applying unique layers () to 2
+# running code CODE(0x18dea30) ...
+# restoring filehandles ...
+# open STDIN, <&8 as 0
+# open STDOUT, >&9 as 1
+# open STDERR, >&10 as 2
+# closed GEN2
+# closed GEN4
+# closed GEN3
+# unproxing 
+# requested layers (unix perlio) for 3
+# applying unique layers () to 3
+# requested layers (unix perlio) for 5
+# applying unique layers () to 5
+# slurping captured stdout from 0 with layers: unix perlio
+# slurping captured stderr from 0 with layers: unix perlio
+# slurped 4 bytes from stdout
+# slurped 4 bytes from stderr
+# ending _capture_tee with (1 1 0 0 CODE(0x18dea30) stdout IO::File=GLOB(0x14f4de8) stderr IO::File=GLOB(0x1509298))...
+# starting _capture_tee with (1 1 0 0 CODE(0x18e9808) stdout IO::File=GLOB(0x14f4de8) stderr IO::File=GLOB(0x1509298))...
+# existing layers for stdin: unix perlio
+# existing layers for stdout: unix perlio
+# existing layers for stderr: unix perlio
+# tied object corrected layers for stdin: unix perlio
+# tied object corrected layers for stdout: unix perlio
+# tied object corrected layers for stderr: unix perlio
+# proxy std: 
+# post-proxy layers for stdin: unix perlio
+# post-proxy layers for stdout: unix perlio
+# post-proxy layers for stderr: unix perlio
+# copying std handles ...
+# open GEN5, <&STDIN as 9
+# open GEN6, >&STDOUT as 10
+# open GEN7, >&STDERR as 11
+# will capture stdout on 5
+# will capture stderr on 8
+# redirecting in parent ...
+# open STDIN, <&9 as 0
+# open STDOUT, >&5 as 1
+# open STDERR, >&8 as 2
+# finalizing layers ...
+# requested layers (unix perlio) for 1
+# applying unique layers () to 1
+# requested layers (unix perlio) for 2
+# applying unique layers () to 2
+# running code CODE(0x18e9808) ...
+# restoring filehandles ...
+# open STDIN, <&9 as 0
+# open STDOUT, >&10 as 1
+# open STDERR, >&11 as 2
+# closed GEN5
+# closed GEN7
+# closed GEN6
+# unproxing 
+# requested layers (unix perlio) for 5
+# applying unique layers () to 5
+# requested layers (unix perlio) for 8
+# applying unique layers () to 8
+# slurping captured stdout from 0 with layers: unix perlio
+# slurping captured stderr from 0 with layers: unix perlio
+# slurped 4 bytes from stdout
+# slurped 4 bytes from stderr
+# ending _capture_tee with (1 1 0 0 CODE(0x18e9808) stdout IO::File=GLOB(0x14f4de8) stderr IO::File=GLOB(0x1509298))...
+# starting _capture_tee with (1 1 0 0 CODE(0x191d910) stdout IO::File=GLOB(0x191e7c8) stderr IO::File=GLOB(0x191dc88))...
+# existing layers for stdin: unix perlio
+# existing layers for stdout: unix perlio
+# existing layers for stderr: unix perlio
+# tied object corrected layers for stdin: unix perlio
+# tied object corrected layers for stdout: unix perlio
+# tied object corrected layers for stderr: unix perlio
+# proxy std: 
+# post-proxy layers for stdin: unix perlio
+# post-proxy layers for stdout: unix perlio
+# post-proxy layers for stderr: unix perlio
+# copying std handles ...
+# open GEN10, <&STDIN as 9
+# open GEN11, >&STDOUT as 10
+# open GEN12, >&STDERR as 11
+# will capture stdout on 5
+# will capture stderr on 8
+# redirecting in parent ...
+# open STDIN, <&9 as 0
+# open STDOUT, >&5 as 1
+# open STDERR, >&8 as 2
+# finalizing layers ...
+# requested layers (unix perlio) for 1
+# applying unique layers () to 1
+# requested layers (unix perlio) for 2
+# applying unique layers () to 2
+# running code CODE(0x191d910) ...
+# restoring filehandles ...
+# open STDIN, <&9 as 0
+# open STDOUT, >&10 as 1
+# open STDERR, >&11 as 2
+# closed GEN10
+# closed GEN12
+# closed GEN11
+# unproxing 
+# requested layers (unix perlio) for 5
+# applying unique layers () to 5
+# requested layers (unix perlio) for 8
+# applying unique layers () to 8
+# slurping captured stdout from 30 with layers: unix perlio
+# slurping captured stderr from 30 with layers: unix perlio
+# slurped 4 bytes from stdout
+# slurped 4 bytes from stderr
+# ending _capture_tee with (1 1 0 0 CODE(0x191d910) stdout IO::File=GLOB(0x191e7c8) stderr IO::File=GLOB(0x191dc88))...

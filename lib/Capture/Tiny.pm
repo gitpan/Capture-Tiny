@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.13'; # VERSION
+our $VERSION = '0.14'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -273,9 +273,10 @@ sub _kill_tees {
 }
 
 sub _slurp {
-  my ($name, $fh) = @_;
-  _debug( "# slurping captured $name with layers: @{[PerlIO::get_layers($fh)]}\n");
-  seek $fh,0,0; local $/; return scalar readline $fh
+  my ($name, $stash) = @_;
+  my ($fh, $pos) = map { $stash->{$_}{$name} } qw/capture pos/;
+  _debug( "# slurping captured $name from $pos with layers: @{[PerlIO::get_layers($fh)]}\n");
+  return do { local $/; seek $fh,$pos,0; scalar readline $fh };
 }
 
 #--------------------------------------------------------------------------#
@@ -285,12 +286,13 @@ sub _slurp {
 sub _capture_tee {
   _debug( "# starting _capture_tee with (@_)...\n" );
   my ($do_stdout, $do_stderr, $do_merge, $do_tee, $code, @opts) = @_;
+  my %do = ($do_stdout ? (stdout => 1) : (),  $do_stderr ? (stderr => 1) : ());
   Carp::confess("Custom capture options must be given as key/value pairs\n")
     unless @opts % 2 == 0;
   my $stash = { capture => { @opts } };
-  for my $n ( keys %{$stash->{capture}} ) {
-    my $fh = $stash->{capture}{$n};
-    Carp::confess "Custom handle for $n must be seekable\n"
+  for ( keys %{$stash->{capture}} ) {
+    my $fh = $stash->{capture}{$_};
+    Carp::confess "Custom handle for $_ must be seekable\n"
       unless ref($fh) eq 'GLOB' || (blessed($fh) && $fh->isa("IO::Seekable"));
   }
   # save existing filehandles and setup captures
@@ -335,14 +337,13 @@ sub _capture_tee {
   # store old handles and setup handles for capture
   $stash->{old} = _copy_std();
   $stash->{new} = { %{$stash->{old}} }; # default to originals
-  $stash->{new}{stdout} = ($stash->{capture}{stdout} ||= File::Temp->new) if $do_stdout;
-  $stash->{new}{stderr} = ($stash->{capture}{stderr} ||= File::Temp->new) if $do_stderr;
-  _debug("# will capture stdout on " . fileno($stash->{capture}{stdout})."\n" ) if $do_stdout;
-  _debug("# will capture stderr on " . fileno($stash->{capture}{stderr})."\n" ) if $do_stderr;
-  # get handles for capture and apply existing IO layers
-  # tees may change $stash->{new}
-  _start_tee( stdout => $stash ) if $do_stdout && $do_tee;
-  _start_tee( stderr => $stash ) if $do_stderr && $do_tee;
+  for ( keys %do ) {
+    $stash->{new}{$_} = ($stash->{capture}{$_} ||= File::Temp->new);
+    seek $stash->{capture}{$_}, 0, 2;
+    $stash->{pos}{$_} = tell $stash->{capture}{$_};
+    _debug("# will capture $_ on " . fileno($stash->{capture}{$_})."\n" );
+    _start_tee( $_ => $stash ) if $do_tee; # tees may change $stash->{new}
+  }
   _wait_for_tees( $stash ) if $do_tee;
   # finalize redirection
   $stash->{new}{stderr} = $stash->{new}{stdout} if $do_merge;
@@ -370,23 +371,23 @@ sub _capture_tee {
   _debug( "# killing tee subprocesses ...\n" ) if $do_tee;
   _kill_tees( $stash ) if $do_tee;
   # return captured output
-  _relayer($stash->{capture}{stdout}, $layers{stdout}) if $do_stdout;
-  _relayer($stash->{capture}{stderr}, $layers{stderr}) if $do_stderr;
-  my $got_out = $do_stdout ? _slurp('stdout' => $stash->{capture}{stdout}) : q();
-  my $got_err = $do_stderr ? _slurp('stderr' => $stash->{capture}{stderr}) : q();
-  _debug("# slurped " . length($got_out) . " bytes from stdout\n");
-  _debug("# slurped " . length($got_err) . " bytes from stderr\n");
-  print CT_ORIG_STDOUT $got_out
+  my %got;
+  for ( keys %do ) {
+    _relayer($stash->{capture}{$_}, $layers{$_});
+    $got{$_} = _slurp($_, $stash);
+    _debug("# slurped " . length($got{$_}) . " bytes from $_\n");
+  }
+  print CT_ORIG_STDOUT $got{stdout}
     if $do_stdout && $do_tee && $localize{stdout};
-  print CT_ORIG_STDERR $got_err
+  print CT_ORIG_STDERR $got{stderr}
     if $do_stderr && $do_tee && $localize{stderr};
   $? = $exit_code;
   $@ = $inner_error if $inner_error;
   die $outer_error if $outer_error;
   _debug( "# ending _capture_tee with (@_)...\n" );
   my @return;
-  push @return, $got_out if $do_stdout;
-  push @return, $got_err if $do_stderr;
+  push @return, $got{stdout} if $do_stdout;
+  push @return, $got{stderr} if $do_stderr;
   push @return, @result;
   return wantarray ? @return : $return[0];
 }
@@ -403,7 +404,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.13
+version 0.14
 
 =head1 SYNOPSIS
 
@@ -472,9 +473,9 @@ provide custom filehandles as a trailing list of option pairs:
    my $err_fh = IO::File->new("out.txt", "w+");
    capture { ... } stdout => $out_fh, stderr => $err_fh;
 
-The filehandles must be readE<sol>write and seekable and should be empty.  Modifying
-the files externally during a capture operation will give unpredictable
-results.  Existing IO layers on them may be changed by the capture.
+The filehandles must be readE<sol>write and seekable.  Modifying the files or
+filehandles during a capture operation will give unpredictable results.
+Existing IO layers on them may be changed by the capture.
 
 =head2 capture_stdout
 
@@ -558,7 +559,7 @@ the call to C<<< capture >>> or C<<< tee >>>.  This may not work for tied handle
 Generally speaking, you should do little or no manipulation of the standard IO
 handles prior to using Capture::Tiny.  In particular, closing, reopening,
 localizing or tying standard handles prior to capture may cause a variety of
-unexpected, undesireable andE<sol>or unreliable behaviors, as described below.
+unexpected, undesirable andE<sol>or unreliable behaviors, as described below.
 Capture::Tiny does its best to compensate for these situations, but the
 results may not be what you desire.
 
@@ -568,7 +569,7 @@ Capture::Tiny will work even if STDIN, STDOUT or STDERR have been previously
 closed.  However, since they will be reopened to capture or tee output, any
 code within the captured block that depends on finding them closed will, of
 course, not find them to be closed.  If they started closed, Capture::Tiny will
-reclose them again when the capture block finishes.
+close them again when the capture block finishes.
 
 Note that this reopening will happen even for STDIN or a handle not being
 captured to ensure that the filehandle used for capture is not opened to file
@@ -598,7 +599,7 @@ Capture::Tiny will attempt to override the tie for the duration of the
 C<<< capture >>> or C<<< tee >>> call and then send captured output to the tied handle after
 the capture is complete.  (Requires Perl 5.8)
 
-Capture::Tiny may not succeed resending utf8 encoded data to a tied
+Capture::Tiny may not succeed resending UTF-8 encoded data to a tied
 STDOUT or STDERR handle.  Characters may appear as bytes.  If the tied handle
 is based on L<Tie::StdHandle>, then Capture::Tiny will attempt to determine
 appropriate layers like C<<< :utf8 >>> from the underlying handle and do the right
@@ -607,14 +608,14 @@ thing.
 Capture::Tiny attempts to preserve the semantics of tied STDIN, but capturing
 or teeing when STDIN is tied is currently broken on Windows.
 
-=head2 Modifiying handles during a capture
+=head2 Modifying handles during a capture
 
 Attempting to modify STDIN, STDOUT or STDERR I<during> C<<< capture >>> or C<<< tee >>> is
 almost certainly going to cause problems.  Don't do that.
 
 =head2 No support for Perl 5.8.0
 
-It's just too buggy when it comes to layers and UTF8.
+It's just too buggy when it comes to layers and UTF-8.
 
 =head1 ENVIRONMENT
 
@@ -742,9 +743,9 @@ L<Test::Output>
 
 =head2 Bugs / Feature Requests
 
-Please report any bugs or feature requests by email to C<bug-capture-tiny at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>. You will be automatically notified of any
-progress on the request by the system.
+Please report any bugs or feature requests through the issue tracker
+at L<http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>.
+You will be notified automatically of any progress on your issue.
 
 =head2 Source Code
 

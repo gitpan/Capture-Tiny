@@ -1,4 +1,5 @@
 Changes
+DEBUG
 LICENSE
 MANIFEST
 META.json
@@ -32,6 +33,8 @@ t/18-custom-capture.t
 t/lib/Cases.pm
 t/lib/TieLC.pm
 t/lib/Utils.pm
+xt/author/critic.t
+xt/author/pod-spell.t
 xt/release/distmeta.t
 xt/release/pod-coverage.t
 xt/release/pod-syntax.t
