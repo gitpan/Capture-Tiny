@@ -1,5 +1,22 @@
 Revision history for Capture-Tiny
 
+0.17      2012-02-22 08:07:41 EST5EDT
+
+  Fixed:
+
+  - Added a workaround for failing t/08-stdin-closed.t under blead
+    perl / 5.15.8 [rt.perl.org #111070]
+
+  Documented:
+
+  - Clarified some limitations; added a link to CPAN Testers Matrix;
+    removed redundant BUGS section; standardized terminology
+
+  Tested:
+
+  - Added a test using Inline::C to print to stdout and stderr in response
+    to rt.cpan.org #71701
+
 0.16      2012-02-12 21:04:24 EST5EDT
 
   Documented:
