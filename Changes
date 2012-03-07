@@ -1,5 +1,18 @@
 Revision history for Capture-Tiny
 
+0.17_51   2012-03-07 18:22:34 EST5EDT
+
+  Fixed:
+
+  - Avoids reopening STDIN while setting up a capture, which avoids
+    some problems with pathological tied filehandle implementations
+    such as in FCGI
+
+  Tested:
+
+  - Re-enabled tied STDIN testing for MSWin32 to see if changes above
+    avoid crashes seen historically
+
 0.17      2012-02-22 08:07:41 EST5EDT
 
   Fixed:

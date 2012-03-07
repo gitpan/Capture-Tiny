@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.17'; # VERSION
+our $VERSION = '0.17_51'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -161,20 +161,21 @@ sub _unproxy {
   }
 }
 
-sub _copy_std {
-  my %handles = map { $_, IO::Handle->new } qw/stdin stdout stderr/;
+sub _copy_out_handles {
+  my %handles = map { $_, IO::Handle->new } qw/stdout stderr/;
   # _debug( "# copying std handles ...\n" );
-  _open $handles{stdin},   "<&STDIN";
   _open $handles{stdout},  ">&STDOUT";
   _open $handles{stderr},  ">&STDERR";
   return \%handles;
 }
 
+# In some cases we open all (prior to forking) and in others we only open
+# the output handles (setting up redirection)
 sub _open_std {
   my ($handles) = @_;
-  _open \*STDIN, "<&" . fileno $handles->{stdin};
-  _open \*STDOUT, ">&" . fileno $handles->{stdout};
-  _open \*STDERR, ">&" . fileno $handles->{stderr};
+  _open \*STDIN, "<&" . fileno $handles->{stdin} if defined $handles->{stdin};
+  _open \*STDOUT, ">&" . fileno $handles->{stdout} if defined $handles->{stdout};
+  _open \*STDERR, ">&" . fileno $handles->{stderr} if defined $handles->{stderr};
 }
 
 #--------------------------------------------------------------------------#
@@ -182,7 +183,7 @@ sub _open_std {
 #--------------------------------------------------------------------------#
 
 sub _start_tee {
-  my ($which, $stash) = @_;
+  my ($which, $stash) = @_; # $which is "stdout" or "stderr"
   # setup pipes
   $stash->{$_}{$which} = IO::Handle->new for qw/tee reader/;
   pipe $stash->{reader}{$which}, $stash->{tee}{$which};
@@ -220,7 +221,7 @@ sub _start_tee {
 }
 
 sub _fork_exec {
-  my ($which, $stash) = @_;
+  my ($which, $stash) = @_; # $which is "stdout" or "stderr"
   my $pid = fork;
   if ( not defined $pid ) {
     Carp::confess "Couldn't fork(): $!";
@@ -314,6 +315,7 @@ sub _capture_tee {
     if tied(*STDERR) && (reftype tied *STDERR eq 'GLOB');
   # _debug( "# tied object corrected layers for $_\: @{$layers{$_}}\n" ) for qw/stdin stdout stderr/;
   # bypass scalar filehandles and tied handles
+  # localize scalar STDIN to get a proxy to pick up FD0, then restore later to CT_ORIG_STDIN
   my %localize;
   $localize{stdin}++,  local(*STDIN)
     if grep { $_ eq 'scalar' } @{$layers{stdin}};
@@ -330,12 +332,11 @@ sub _capture_tee {
   my %proxy_std = _proxy_std();
   # _debug( "# proxy std: @{ [%proxy_std] }\n" );
   # update layers after any proxying
-  $layers{stdin}  = [PerlIO::get_layers(\*STDIN)]  if $proxy_std{stdin};
   $layers{stdout} = [PerlIO::get_layers(\*STDOUT)] if $proxy_std{stdout};
   $layers{stderr} = [PerlIO::get_layers(\*STDERR)] if $proxy_std{stderr};
   # _debug( "# post-proxy layers for $_\: @{$layers{$_}}\n" ) for qw/stdin stdout stderr/;
   # store old handles and setup handles for capture
-  $stash->{old} = _copy_std();
+  $stash->{old} = _copy_out_handles();
   $stash->{new} = { %{$stash->{old}} }; # default to originals
   for ( keys %do ) {
     $stash->{new}{$_} = ($stash->{capture}{$_} ||= File::Temp->new);
@@ -404,7 +405,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.17
+version 0.17_51
 
 =head1 SYNOPSIS
 
@@ -587,12 +588,15 @@ to send output to the original filehandles (which will thus not be captured).
 B<Scalar filehandles>
 
 If STDOUT or STDERR are reopened to scalar filehandles prior to the call to
-C<<< capture >>> or C<<< tee >>>, then Capture::Tiny will override the output filehandle for the
-duration of the C<<< capture >>> or C<<< tee >>> call and then send captured output to the
-output filehandle after the capture is complete.  (Requires Perl 5.8)
+C<<< capture >>> or C<<< tee >>>, then Capture::Tiny will override the output filehandle for
+the duration of the C<<< capture >>> or C<<< tee >>> call and then, for C<<< tee >>>, send captured
+output to the output filehandle after the capture is complete.  (Requires Perl
+5.8)
 
 Capture::Tiny attempts to preserve the semantics of STDIN opened to a scalar
-reference.
+reference, but note that external processes will not be able to read from such
+a handle.  Capture::Tiny tries to ensure that external processes will read from
+the null device instead, but this is not guaranteed.
 
 B<Tied output filehandles>
 
@@ -616,12 +620,11 @@ entirely stable or portable. For example:
 
 =item *
 
-Capturing or teeing with STDIN tied is broken on Windows
+Trying does not affect how external processes read data
 
 =item *
 
-L<FCGI> has been reported as having a pathological tied filehandle implementation
-that causes fatal (and hard to diagnose) errors
+Capturing or teeing with STDIN tied has been reported broken on Windows
 
 =back
 
@@ -750,7 +753,7 @@ L<Test::Output>
 
 =back
 
-=for :stopwords cpan testmatrix url annocpan anno bugtracker rt cpants kwalitee diff irc mailto metadata placeholders
+=for :stopwords cpan testmatrix url annocpan anno bugtracker rt cpants kwalitee diff irc mailto metadata placeholders metacpan
 
 =head1 SUPPORT
 
