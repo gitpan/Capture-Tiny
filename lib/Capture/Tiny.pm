@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.17_51'; # VERSION
+our $VERSION = '0.17_52'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -161,11 +161,13 @@ sub _unproxy {
   }
 }
 
-sub _copy_out_handles {
-  my %handles = map { $_, IO::Handle->new } qw/stdout stderr/;
-  # _debug( "# copying std handles ...\n" );
-  _open $handles{stdout},  ">&STDOUT";
-  _open $handles{stderr},  ">&STDERR";
+sub _copy_std {
+  my %handles;
+  for my $h ( qw/stdout stderr stdin/ ) {
+    next if $h eq 'stdin' && ! $IS_WIN32; # WIN32 hangs on tee without STDIN copied
+    my $redir = $h eq 'stdin' ? "<&" : ">&";
+    _open $handles{$h} = IO::Handle->new(), $redir . uc($h); # ">&STDOUT" or "<&STDIN"
+  }
   return \%handles;
 }
 
@@ -205,12 +207,8 @@ sub _start_tee {
     # _debug( "# Win32API::File loaded\n") unless $@;
     my $os_fhandle = GetOsFHandle( $stash->{tee}{$which} );
     # _debug( "# Couldn't get OS handle: " . fileLastError() . "\n") if ! defined $os_fhandle || $os_fhandle == INVALID_HANDLE_VALUE();
-    if ( SetHandleInformation( $os_fhandle, HANDLE_FLAG_INHERIT(), 0) ) {
-      # _debug( "# set no-inherit flag on $which tee\n" );
-    }
-    else {
-      # _debug( "# can't disable tee handle flag inherit: " . fileLastError() . "\n");
-    }
+    my $result = SetHandleInformation( $os_fhandle, HANDLE_FLAG_INHERIT(), 0);
+    # _debug( $result ? "# set no-inherit flag on $which tee\n" : ("# can't disable tee handle flag inherit: " . fileLastError() . "\n"));
     _open_std( $stash->{child}{$which} );
     $stash->{pid}{$which} = system(1, @cmd, $stash->{flag_files}{$which});
     # not restoring std here as it all gets redirected again shortly anyway
@@ -323,6 +321,8 @@ sub _capture_tee {
     if $do_stdout && grep { $_ eq 'scalar' } @{$layers{stdout}};
   $localize{stderr}++, local(*STDERR)
     if ($do_stderr || $do_merge) && grep { $_ eq 'scalar' } @{$layers{stderr}};
+  $localize{stdin}++, local(*STDIN), _open( \*STDIN, "<&=0")
+    if tied *STDIN && $] >= 5.008;
   $localize{stdout}++, local(*STDOUT), _open( \*STDOUT, ">&=1")
     if $do_stdout && tied *STDOUT && $] >= 5.008;
   $localize{stderr}++, local(*STDERR), _open( \*STDERR, ">&=2")
@@ -336,7 +336,7 @@ sub _capture_tee {
   $layers{stderr} = [PerlIO::get_layers(\*STDERR)] if $proxy_std{stderr};
   # _debug( "# post-proxy layers for $_\: @{$layers{$_}}\n" ) for qw/stdin stdout stderr/;
   # store old handles and setup handles for capture
-  $stash->{old} = _copy_out_handles();
+  $stash->{old} = _copy_std();
   $stash->{new} = { %{$stash->{old}} }; # default to originals
   for ( keys %do ) {
     $stash->{new}{$_} = ($stash->{capture}{$_} ||= File::Temp->new);
@@ -405,7 +405,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.17_51
+version 0.17_52
 
 =head1 SYNOPSIS
 
@@ -466,7 +466,7 @@ scalar context on the return value, you must use the C<<< scalar >>> keyword.
      return scalar @list; # $count will be 3
    };
 
-Captures are normally done internally to an anonymous filehandle.  To
+Captures are normally done to an anonymous temporary filehandle.  To
 capture via a named file (e.g. to externally monitor a long-running capture),
 provide custom filehandles as a trailing list of option pairs:
 
@@ -554,8 +554,9 @@ for test result by platform.
 =head2 PerlIO layers
 
 Capture::Tiny does it's best to preserve PerlIO layers such as ':utf8' or
-':crlf' when capturing.   Layers should be applied to STDOUT or STDERR I<before>
-the call to C<<< capture >>> or C<<< tee >>>.  This may not work for tied filehandles (see below).
+':crlf' when capturing (only for Perl 5.8.1+) .  Layers should be applied to
+STDOUT or STDERR I<before> the call to C<<< capture >>> or C<<< tee >>>.  This may not work
+for tied filehandles (see below).
 
 =head2 Modifying filehandles before capturing
 
@@ -613,20 +614,9 @@ thing.
 
 B<Tied input filehandle>
 
-Capture::Tiny attempts to preserve the semantics of tied STDIN, but this is not
-entirely stable or portable. For example:
-
-=over
-
-=item *
-
-Trying does not affect how external processes read data
-
-=item *
-
-Capturing or teeing with STDIN tied has been reported broken on Windows
-
-=back
+Capture::Tiny attempts to preserve the semantics of tied STDIN, but this
+requires Perl 5.8 and is not entirely predictable.  External processes
+will not be able to read from such a handle.
 
 Unless having STDIN tied is crucial, it may be safest to localize STDIN when
 capturing:
@@ -640,7 +630,12 @@ almost certainly going to cause problems.  Don't do that.
 
 =head2 No support for Perl 5.8.0
 
-It's just too buggy when it comes to layers and UTF-8.
+It's just too buggy when it comes to layers and UTF-8.  Perl 5.8.1 or later
+is recommended.
+
+=head2 Limited support for Perl 5.6
+
+Perl 5.6 predates PerlIO.  UTF-8 data may not be captured correctly.
 
 =head1 ENVIRONMENT
 

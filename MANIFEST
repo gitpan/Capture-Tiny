@@ -33,6 +33,8 @@ t/19-inline-c.t
 t/20-stdout-badtie.t
 t/21-stderr-badtie.t
 t/22-stdin-badtie.t
+t/23-all-tied.t
+t/24-all-badtied.t
 t/lib/Cases.pm
 t/lib/TieEvil.pm
 t/lib/TieLC.pm
