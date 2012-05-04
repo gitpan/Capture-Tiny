@@ -3,7 +3,7 @@ NAME
     programs
 
 VERSION
-    version 0.17_52
+    version 0.18
 
 SYNOPSIS
        use Capture::Tiny ':all';
@@ -74,6 +74,9 @@ USAGE
     filehandles during a capture operation will give unpredictable results.
     Existing IO layers on them may be changed by the capture.
 
+    When called in void context, "capture" saves memory and time by not
+    reading back from the capture handles.
+
   capture_stdout
        ($stdout, @result) = capture_stdout \&code;
        $stdout = capture_stdout \&code;
@@ -105,6 +108,10 @@ USAGE
 
     The "tee" function works just like "capture", except that output is
     captured as well as passed on to the original STDOUT and STDERR.
+
+    When called in void context, "tee" saves memory and time by not reading
+    back from the capture handles, except when the original STDOUT OR STDERR
+    were tied or opened to a scalar handle.
 
   tee_stdout
        ($stdout, @result) = tee_stdout \&code;

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.17_52'; # VERSION
+our $VERSION = '0.18'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -371,21 +371,25 @@ sub _capture_tee {
   _unproxy( %proxy_std );
   # _debug( "# killing tee subprocesses ...\n" ) if $do_tee;
   _kill_tees( $stash ) if $do_tee;
-  # return captured output
+  # return captured output, but shortcut in void context
+  # unless we have to echo output to tied/scalar handles;
   my %got;
-  for ( keys %do ) {
-    _relayer($stash->{capture}{$_}, $layers{$_});
-    $got{$_} = _slurp($_, $stash);
-    # _debug("# slurped " . length($got{$_}) . " bytes from $_\n");
+  if ( defined wantarray or ($do_tee && keys %localize) ) {
+    for ( keys %do ) {
+      _relayer($stash->{capture}{$_}, $layers{$_});
+      $got{$_} = _slurp($_, $stash);
+      # _debug("# slurped " . length($got{$_}) . " bytes from $_\n");
+    }
+    print CT_ORIG_STDOUT $got{stdout}
+      if $do_stdout && $do_tee && $localize{stdout};
+    print CT_ORIG_STDERR $got{stderr}
+      if $do_stderr && $do_tee && $localize{stderr};
   }
-  print CT_ORIG_STDOUT $got{stdout}
-    if $do_stdout && $do_tee && $localize{stdout};
-  print CT_ORIG_STDERR $got{stderr}
-    if $do_stderr && $do_tee && $localize{stderr};
   $? = $exit_code;
   $@ = $inner_error if $inner_error;
   die $outer_error if $outer_error;
   # _debug( "# ending _capture_tee with (@_)...\n" );
+  return unless defined wantarray;
   my @return;
   push @return, $got{stdout} if $do_stdout;
   push @return, $got{stderr} if $do_stderr;
@@ -405,7 +409,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.17_52
+version 0.18
 
 =head1 SYNOPSIS
 
@@ -478,6 +482,9 @@ The filehandles must be readE<sol>write and seekable.  Modifying the files or
 filehandles during a capture operation will give unpredictable results.
 Existing IO layers on them may be changed by the capture.
 
+When called in void context, C<<< capture >>> saves memory and time by
+not reading back from the capture handles.
+
 =head2 capture_stdout
 
    ($stdout, @result) = capture_stdout \&code;
@@ -513,6 +520,11 @@ properly ordered due to buffering.
 
 The C<<< tee >>> function works just like C<<< capture >>>, except that output is captured
 as well as passed on to the original STDOUT and STDERR.
+
+When called in void context, C<<< tee >>> saves memory and time by
+not reading back from the capture handles, except when the
+original STDOUT OR STDERR were tied or opened to a scalar
+handle.
 
 =head2 tee_stdout
 

@@ -1,5 +1,12 @@
 Revision history for Capture-Tiny
 
+0.18      2012-05-04 16:31:53 America/New_York
+
+  Added
+
+  - When capture or tee are called in void context, Capture::Tiny
+    skips reading back from the capture handles if it can do so safely
+
 0.17_52   2012-03-09 11:45:19 EST5EDT
 
   Fixed:
