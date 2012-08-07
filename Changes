@@ -1,8 +1,15 @@
 Revision history for Capture-Tiny
 
+0.19      2012-08-06 20:26:34 America/New_York
+
+  Fixed:
+
+  - Work around rt.perl.org #114404 by forcing PerlIO layers back on
+    original handles [rt.cpan.org #78819]
+
 0.18      2012-05-04 16:31:53 America/New_York
 
-  Added
+  Added:
 
   - When capture or tee are called in void context, Capture::Tiny
     skips reading back from the capture handles if it can do so safely

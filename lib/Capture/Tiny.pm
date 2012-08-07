@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.18'; # VERSION
+our $VERSION = '0.19'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -368,6 +368,9 @@ sub _capture_tee {
   # _debug( "# restoring filehandles ...\n" );
   _open_std( $stash->{old} );
   _close( $_ ) for values %{$stash->{old}}; # don't leak fds
+  # shouldn't need relayering originals, but see rt.perl.org #114404
+  _relayer(\*STDOUT, $layers{stdout}) if $do_stdout;
+  _relayer(\*STDERR, $layers{stderr}) if $do_stderr;
   _unproxy( %proxy_std );
   # _debug( "# killing tee subprocesses ...\n" ) if $do_tee;
   _kill_tees( $stash ) if $do_tee;
@@ -409,7 +412,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.18
+version 0.19
 
 =head1 SYNOPSIS
 
