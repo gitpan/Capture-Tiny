@@ -3,7 +3,7 @@ NAME
     programs
 
 VERSION
-    version 0.19
+    version 0.20
 
 SYNOPSIS
        use Capture::Tiny ':all';
@@ -96,8 +96,8 @@ USAGE
        $merged = capture_merged \&code;
 
     The "capture_merged" function works just like "capture" except STDOUT
-    and STDERR are merged. (Technically, STDERR is redirected to STDOUT
-    before executing the function.)
+    and STDERR are merged. (Technically, STDERR is redirected to the same
+    capturing handle as STDOUT before executing the function.)
 
     Caution: STDOUT and STDERR output in the merged result are not
     guaranteed to be properly ordered due to buffering.
@@ -296,7 +296,7 @@ SEE ALSO
 SUPPORT
   Bugs / Feature Requests
     Please report any bugs or feature requests through the issue tracker at
-    <http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>. You
+    <https://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>. You
     will be notified automatically of any progress on your issue.
 
   Source Code
@@ -305,7 +305,7 @@ SUPPORT
 
     <https://github.com/dagolden/capture-tiny>
 
-      git clone https://github.com/dagolden/capture-tiny.git
+      git clone git://github.com/dagolden/capture-tiny.git
 
 AUTHOR
     David Golden <dagolden@cpan.org>

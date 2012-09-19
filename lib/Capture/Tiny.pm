@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.19'; # VERSION
+our $VERSION = '0.20'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -26,11 +26,11 @@ my %api = (
   capture         => [1,1,0,0],
   capture_stdout  => [1,0,0,0],
   capture_stderr  => [0,1,0,0],
-  capture_merged  => [1,0,1,0], # don't do STDERR since merging
+  capture_merged  => [1,1,1,0],
   tee             => [1,1,0,1],
   tee_stdout      => [1,0,0,1],
   tee_stderr      => [0,1,0,1],
-  tee_merged      => [1,0,1,1], # don't do STDERR since merging
+  tee_merged      => [1,1,1,1],
 );
 
 for my $sub ( keys %api ) {
@@ -301,8 +301,8 @@ sub _capture_tee {
   # find initial layers
   my %layers = (
     stdin   => [PerlIO::get_layers(\*STDIN) ],
-    stdout  => [PerlIO::get_layers(\*STDOUT)],
-    stderr  => [PerlIO::get_layers(\*STDERR)],
+    stdout  => [PerlIO::get_layers(\*STDOUT, output => 1)],
+    stderr  => [PerlIO::get_layers(\*STDERR, output => 1)],
   );
   # _debug( "# existing layers for $_\: @{$layers{$_}}\n" ) for qw/stdin stdout stderr/;
   # get layers from underlying glob of tied filehandles if we can
@@ -354,7 +354,6 @@ sub _capture_tee {
   my ($exit_code, $inner_error, $outer_error, @result);
   {
     local *STDIN = *CT_ORIG_STDIN if $localize{stdin}; # get original, not proxy STDIN
-    local *STDERR = *STDOUT if $do_merge; # minimize buffer mixups during $code
     # _debug( "# finalizing layers ...\n" );
     _relayer(\*STDOUT, $layers{stdout}) if $do_stdout;
     _relayer(\*STDERR, $layers{stderr}) if $do_stderr;
@@ -395,14 +394,14 @@ sub _capture_tee {
   return unless defined wantarray;
   my @return;
   push @return, $got{stdout} if $do_stdout;
-  push @return, $got{stderr} if $do_stderr;
+  push @return, $got{stderr} if $do_stderr && ! $do_merge;
   push @return, @result;
   return wantarray ? @return : $return[0];
 }
 
 1;
 
-
+__END__
 
 =pod
 
@@ -412,7 +411,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.19
+version 0.20
 
 =head1 SYNOPSIS
 
@@ -510,8 +509,8 @@ STDERR is captured.  STDOUT is not captured.
    $merged = capture_merged \&code;
 
 The C<<< capture_merged >>> function works just like C<<< capture >>> except STDOUT and
-STDERR are merged. (Technically, STDERR is redirected to STDOUT before
-executing the function.)
+STDERR are merged. (Technically, STDERR is redirected to the same capturing
+handle as STDOUT before executing the function.)
 
 Caution: STDOUT and STDERR output in the merged result are not guaranteed to be
 properly ordered due to buffering.
@@ -770,7 +769,7 @@ L<Test::Output>
 =head2 Bugs / Feature Requests
 
 Please report any bugs or feature requests through the issue tracker
-at L<http://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>.
+at L<https://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>.
 You will be notified automatically of any progress on your issue.
 
 =head2 Source Code
@@ -780,7 +779,7 @@ public review and contribution under the terms of the license.
 
 L<https://github.com/dagolden/capture-tiny>
 
-  git clone https://github.com/dagolden/capture-tiny.git
+  git clone git://github.com/dagolden/capture-tiny.git
 
 =head1 AUTHOR
 
@@ -795,8 +794,3 @@ This is free software, licensed under:
   The Apache License, Version 2.0, January 2004
 
 =cut
-
-
-__END__
-
-

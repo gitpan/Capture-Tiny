@@ -1,5 +1,12 @@
 Revision history for Capture-Tiny
 
+0.20      2012-09-19 13:20:57 America/New_York
+
+  Fixed:
+
+  - Nested merged captures that include an external program call no longer
+    leak STDERR to the outer scope [rt.cpan.org #79376]
+
 0.19      2012-08-06 20:26:34 America/New_York
 
   Fixed:
