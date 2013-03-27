@@ -3,7 +3,7 @@ NAME
     programs
 
 VERSION
-    version 0.21
+    version 0.22
 
 SYNOPSIS
        use Capture::Tiny ':all';
@@ -312,8 +312,8 @@ SEE ALSO
 SUPPORT
   Bugs / Feature Requests
     Please report any bugs or feature requests through the issue tracker at
-    <https://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>. You
-    will be notified automatically of any progress on your issue.
+    <https://github.com/dagolden/capture-tiny/issues>. You will be notified
+    automatically of any progress on your issue.
 
   Source Code
     This is open source software. The code repository is available for

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.21'; # VERSION
+our $VERSION = '0.22'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -405,13 +405,15 @@ __END__
 
 =pod
 
+=encoding utf-8
+
 =head1 NAME
 
 Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.21
+version 0.22
 
 =head1 SYNOPSIS
 
@@ -784,7 +786,7 @@ L<Test::Output>
 =head2 Bugs / Feature Requests
 
 Please report any bugs or feature requests through the issue tracker
-at L<https://rt.cpan.org/Public/Dist/Display.html?Name=Capture-Tiny>.
+at L<https://github.com/dagolden/capture-tiny/issues>.
 You will be notified automatically of any progress on your issue.
 
 =head2 Source Code

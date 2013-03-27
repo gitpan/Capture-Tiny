@@ -13,6 +13,7 @@ examples/tee.pl
 lib/Capture/Tiny.pm
 perlcritic.rc
 t/00-compile.t
+t/00-report-prereqs.t
 t/01-Capture-Tiny.t
 t/02-capture.t
 t/03-tee.t
@@ -42,6 +43,7 @@ t/lib/Utils.pm
 xt/author/critic.t
 xt/author/pod-spell.t
 xt/release/distmeta.t
+xt/release/minimum-version.t
 xt/release/pod-coverage.t
 xt/release/pod-syntax.t
 xt/release/portability.t

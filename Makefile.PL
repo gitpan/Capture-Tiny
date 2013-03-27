@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use 5.006;
+use 5.008;
 
 use ExtUtils::MakeMaker 6.30;
 
@@ -13,8 +13,11 @@ my %WriteMakefileArgs = (
   "AUTHOR" => "David Golden <dagolden\@cpan.org>",
   "BUILD_REQUIRES" => {
     "Config" => 0,
+    "ExtUtils::MakeMaker" => 0,
     "File::Find" => 0,
+    "File::Spec::Functions" => 0,
     "IO::File" => 0,
+    "List::Util" => 0,
     "Test::More" => "0.62"
   },
   "CONFIGURE_REQUIRES" => {
@@ -34,7 +37,7 @@ my %WriteMakefileArgs = (
     "strict" => 0,
     "warnings" => 0
   },
-  "VERSION" => "0.21",
+  "VERSION" => "0.22",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -58,7 +61,7 @@ delete $WriteMakefileArgs{CONFIGURE_REQUIRES}
   unless eval { ExtUtils::MakeMaker->VERSION(6.52) };
 
 if ( $^O eq 'MSWin32' ) {
-  $WriteMakefileArgs{PREREQ_PM}{'Win32API::File'} = '0';
+	$WriteMakefileArgs{PREREQ_PM}{'Win32API::File'} = '0';
 }
 
 WriteMakefile(%WriteMakefileArgs);
