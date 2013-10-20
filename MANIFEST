@@ -1,3 +1,4 @@
+CONTRIBUTING
 Changes
 LICENSE
 MANIFEST
@@ -5,14 +6,13 @@ META.json
 META.yml
 Makefile.PL
 README
-README.PATCHING
 Todo
+cpanfile
 dist.ini
 examples/rt-58208.pl
 examples/tee.pl
 lib/Capture/Tiny.pm
 perlcritic.rc
-t/00-compile.t
 t/00-report-prereqs.t
 t/01-Capture-Tiny.t
 t/02-capture.t
@@ -40,6 +40,7 @@ t/lib/Cases.pm
 t/lib/TieEvil.pm
 t/lib/TieLC.pm
 t/lib/Utils.pm
+xt/author/00-compile.t
 xt/author/critic.t
 xt/author/pod-spell.t
 xt/release/distmeta.t

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 package Capture::Tiny;
 # ABSTRACT: Capture STDOUT and STDERR from Perl, XS or external programs
-our $VERSION = '0.22'; # VERSION
+our $VERSION = '0.23'; # VERSION
 use Carp ();
 use Exporter ();
 use IO::Handle ();
@@ -114,7 +114,7 @@ sub _proxy_std {
       _open $dup{stdin} = IO::Handle->new, "<&=STDIN";
     }
     $proxies{stdin} = \*STDIN;
-    binmode(STDIN, ':utf8') if $] >= 5.008;
+    binmode(STDIN, ':utf8') if $] >= 5.008; ## no critic
   }
   if ( ! defined fileno STDOUT ) {
     $proxy_count{stdout}++;
@@ -128,7 +128,7 @@ sub _proxy_std {
       _open $dup{stdout} = IO::Handle->new, ">&=STDOUT";
     }
     $proxies{stdout} = \*STDOUT;
-    binmode(STDOUT, ':utf8') if $] >= 5.008;
+    binmode(STDOUT, ':utf8') if $] >= 5.008; ## no critic
   }
   if ( ! defined fileno STDERR ) {
     $proxy_count{stderr}++;
@@ -142,7 +142,7 @@ sub _proxy_std {
       _open $dup{stderr} = IO::Handle->new, ">&=STDERR";
     }
     $proxies{stderr} = \*STDERR;
-    binmode(STDERR, ':utf8') if $] >= 5.008;
+    binmode(STDERR, ':utf8') if $] >= 5.008; ## no critic
   }
   return %proxies;
 }
@@ -405,7 +405,7 @@ __END__
 
 =pod
 
-=encoding utf-8
+=encoding UTF-8
 
 =head1 NAME
 
@@ -413,7 +413,7 @@ Capture::Tiny - Capture STDOUT and STDERR from Perl, XS or external programs
 
 =head1 VERSION
 
-version 0.22
+version 0.23
 
 =head1 SYNOPSIS
 
@@ -485,6 +485,21 @@ scalar context on the return value, you must use the C<<< scalar >>> keyword.
      my @list = qw/one two three/;
      return scalar @list; # $count will be 3
    };
+
+Also note that within the coderef, the C<<< @_ >>> variable will be empty.  So don't
+use arguments from a surrounding subroutine without copying them to an array
+first:
+
+   sub wont_work {
+     my ($stdout, $stderr) = capture { do_stuff( @_ ) };    # WRONG
+     ...
+   }
+ 
+   sub will_work {
+     my @args = @_;
+     my ($stdout, $stderr) = capture { do_stuff( @args ) }; # RIGHT
+     ...
+   }
 
 Captures are normally done to an anonymous temporary filehandle.  To
 capture via a named file (e.g. to externally monitor a long-running capture),
@@ -786,7 +801,7 @@ L<Test::Output>
 =head2 Bugs / Feature Requests
 
 Please report any bugs or feature requests through the issue tracker
-at L<https://github.com/dagolden/capture-tiny/issues>.
+at L<https://github.com/dagolden/Capture-Tiny/issues>.
 You will be notified automatically of any progress on your issue.
 
 =head2 Source Code
@@ -794,13 +809,17 @@ You will be notified automatically of any progress on your issue.
 This is open source software.  The code repository is available for
 public review and contribution under the terms of the license.
 
-L<https://github.com/dagolden/capture-tiny>
+L<https://github.com/dagolden/Capture-Tiny>
 
-  git clone git://github.com/dagolden/capture-tiny.git
+  git clone https://github.com/dagolden/Capture-Tiny.git
 
 =head1 AUTHOR
 
 David Golden <dagolden@cpan.org>
+
+=head1 CONTRIBUTOR
+
+Dagfinn Ilmari Mannsåker <ilmari@ilmari.org>
 
 =head1 COPYRIGHT AND LICENSE
 
