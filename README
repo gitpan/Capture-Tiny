@@ -3,7 +3,7 @@ NAME
     programs
 
 VERSION
-    version 0.24
+    version 0.25
 
 SYNOPSIS
        use Capture::Tiny ':all';
@@ -341,8 +341,10 @@ SUPPORT
 AUTHOR
     David Golden <dagolden@cpan.org>
 
-CONTRIBUTOR
-    Dagfinn Ilmari Mannsåker <ilmari@ilmari.org>
+CONTRIBUTORS
+    *   Dagfinn Ilmari Mannsåker <ilmari@ilmari.org>
+
+    *   David E. Wheeler <david@justatheory.com>
 
 COPYRIGHT AND LICENSE
     This software is Copyright (c) 2009 by David Golden.

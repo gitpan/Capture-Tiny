@@ -4,16 +4,14 @@ author:
   - 'David Golden <dagolden@cpan.org>'
 build_requires:
   ExtUtils::MakeMaker: '0'
-  File::Spec::Functions: '0'
+  File::Spec: '0'
   IO::File: '0'
-  List::Util: '0'
   Test::More: '0.62'
   lib: '0'
-  version: '0'
 configure_requires:
   ExtUtils::MakeMaker: '6.17'
 dynamic_config: 1
-generated_by: 'Dist::Zilla version 5.012, CPAN::Meta::Converter version 2.133380'
+generated_by: 'Dist::Zilla version 5.020, CPAN::Meta::Converter version 2.140640'
 license: apache
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -30,7 +28,7 @@ no_index:
 provides:
   Capture::Tiny:
     file: lib/Capture/Tiny.pm
-    version: '0.24'
+    version: '0.25'
 requires:
   Carp: '0'
   Exporter: '0'
@@ -45,7 +43,8 @@ resources:
   bugtracker: https://github.com/dagolden/Capture-Tiny/issues
   homepage: https://github.com/dagolden/Capture-Tiny
   repository: https://github.com/dagolden/Capture-Tiny.git
-version: '0.24'
+version: '0.25'
 x_authority: cpan:DAGOLDEN
 x_contributors:
   - 'Dagfinn Ilmari Mannsåker <ilmari@ilmari.org>'
+  - 'David E. Wheeler <david@justatheory.com>'

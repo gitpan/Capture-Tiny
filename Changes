@@ -1,11 +1,17 @@
 Revision history for Capture-Tiny
 
+0.25      2014-08-16 10:08:42-04:00 America/New_York
+
+  Prereqs:
+
+  - Amended recommended modules to list Inline::C rather than Inline
+
 0.24      2014-02-06 17:15:37-05:00 America/New_York
 
   Fixed:
 
-  - Closed security hole in use of semaphore flag in /tmp;
-    now opens semaphore the using O_CREAT|O_EXCL
+  - Closed security hole in use of semaphore file in /tmp;
+    now opens the semaphore file using O_CREAT|O_EXCL
     
 0.23      2013-10-20 11:25:34 America/New_York
 
