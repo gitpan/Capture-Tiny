@@ -12,6 +12,7 @@ on 'test' => sub {
   requires "ExtUtils::MakeMaker" => "0";
   requires "File::Spec" => "0";
   requires "IO::File" => "0";
+  requires "Inline::C" => "0";
   requires "Test::More" => "0.62";
   requires "lib" => "0";
 };
@@ -30,7 +31,7 @@ on 'develop' => sub {
   requires "Dist::Zilla::Plugin::OSPrereqs" => "0";
   requires "Dist::Zilla::Plugin::Prereqs" => "0";
   requires "Dist::Zilla::Plugin::RemovePrereqs" => "0";
-  requires "Dist::Zilla::PluginBundle::DAGOLDEN" => "0.060";
+  requires "Dist::Zilla::PluginBundle::DAGOLDEN" => "0.072";
   requires "File::Spec" => "0";
   requires "File::Temp" => "0";
   requires "IO::Handle" => "0";

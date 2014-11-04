@@ -10,7 +10,7 @@ do { my $x = {
                                       'Dist::Zilla::Plugin::OSPrereqs' => '0',
                                       'Dist::Zilla::Plugin::Prereqs' => '0',
                                       'Dist::Zilla::Plugin::RemovePrereqs' => '0',
-                                      'Dist::Zilla::PluginBundle::DAGOLDEN' => '0.060',
+                                      'Dist::Zilla::PluginBundle::DAGOLDEN' => '0.072',
                                       'File::Spec' => '0',
                                       'File::Temp' => '0',
                                       'IO::Handle' => '0',
@@ -45,6 +45,7 @@ do { my $x = {
                                    'ExtUtils::MakeMaker' => '0',
                                    'File::Spec' => '0',
                                    'IO::File' => '0',
+                                   'Inline::C' => '0',
                                    'Test::More' => '0.62',
                                    'lib' => '0'
                                  }
