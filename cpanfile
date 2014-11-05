@@ -12,7 +12,6 @@ on 'test' => sub {
   requires "ExtUtils::MakeMaker" => "0";
   requires "File::Spec" => "0";
   requires "IO::File" => "0";
-  requires "Inline::C" => "0";
   requires "Test::More" => "0.62";
   requires "lib" => "0";
 };
